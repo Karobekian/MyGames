@@ -264,6 +264,86 @@
     border-color: var(--gold);
   }
 
+  /* ── Strategy tip ── */
+  .tip-panel {
+    width: min(500px, 100%);
+    margin-top: 14px;
+    background: var(--walnut-mid);
+    border: 1px solid var(--walnut-rim);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .tip-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color .2s;
+  }
+  .tip-header:hover { background: rgba(255,255,255,.03); }
+  .tip-panel.open .tip-header { border-bottom-color: var(--walnut-rim); }
+
+  .tip-header-left {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tip-icon { font-size: 1rem; }
+  .tip-title {
+    font-family: 'DM Mono', monospace;
+    font-size: .65rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .tip-toggle {
+    font-size: .7rem;
+    color: var(--text-dim);
+    transition: transform .25s;
+  }
+  .tip-panel.open .tip-toggle { transform: rotate(180deg); }
+
+  .tip-body {
+    display: none;
+    padding: 14px 16px;
+    gap: 10px;
+    flex-direction: column;
+  }
+  .tip-panel.open .tip-body { display: flex; }
+
+  .tip-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 5px;
+    background: rgba(0,0,0,.2);
+    border-left: 3px solid var(--walnut-rim);
+    transition: border-color .3s, background .3s;
+  }
+  .tip-card.urgent {
+    border-left-color: #e07b3a;
+    background: rgba(224,123,58,.07);
+  }
+  .tip-card.good {
+    border-left-color: #5aaa6e;
+    background: rgba(90,170,110,.07);
+  }
+  .tip-card.neutral {
+    border-left-color: var(--gold);
+    background: rgba(201,150,58,.06);
+  }
+
+  .tip-emoji { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+  .tip-text {
+    font-size: .78rem;
+    line-height: 1.5;
+    color: var(--text-light);
+  }
+  .tip-text strong { color: var(--gold); font-weight: 500; }
+
   /* ── Overlay ── */
   #overlay {
     display: none;
@@ -345,6 +425,23 @@
 <div class="controls">
   <button id="btn-hints">Hints: On</button>
   <button id="btn-new">New Game</button>
+</div>
+
+<!-- Strategy tip panel -->
+<div class="tip-panel open" id="tip-panel">
+  <div class="tip-header" id="tip-toggle-btn">
+    <div class="tip-header-left">
+      <span class="tip-icon">💡</span>
+      <span class="tip-title">Strategy Tips</span>
+    </div>
+    <span class="tip-toggle">▼</span>
+  </div>
+  <div class="tip-body" id="tip-body">
+    <div class="tip-card neutral">
+      <span class="tip-emoji">🎯</span>
+      <span class="tip-text">Make your first move to get started!</span>
+    </div>
+  </div>
 </div>
 
 <div id="overlay">
@@ -668,7 +765,11 @@ function render(){
     }
     statusEl.classList.remove('alert');
     if(isAiTurn()) setTimeout(scheduleAi, 350);
+    else renderTips();
   }
+
+  // Show/hide tip panel based on mode
+  document.getElementById('tip-panel').style.display = mode==='2p' ? 'none' : '';
 }
 
 function endGame(w,bl){
@@ -686,6 +787,120 @@ function endGame(w,bl){
   }
   document.getElementById('result-title').textContent=title;
   setTimeout(()=>document.getElementById('overlay').classList.add('show'),600);
+}
+
+// ── Strategy tips ─────────────────────────────────────────────
+const CORNERS = [[0,0],[0,7],[7,0],[7,7]];
+// X-squares (diagonal to corners) and C-squares (edge-adjacent to corners)
+const X_SQUARES = [[1,1],[1,6],[6,1],[6,6]];
+const C_SQUARES = [[0,1],[1,0],[0,6],[1,7],[6,0],[7,1],[6,7],[7,6]];
+
+function cellType(r,c){
+  if(CORNERS.some(([cr,cc])=>cr===r&&cc===c)) return 'corner';
+  if(X_SQUARES.some(([xr,xc])=>xr===r&&xc===c)) return 'x-square';
+  if(C_SQUARES.some(([cr,cc])=>cr===r&&cc===c)) return 'c-square';
+  const onEdge = r===0||r===7||c===0||c===7;
+  return onEdge ? 'edge' : 'inner';
+}
+
+function getTips(b, player){
+  const opp = player===WHITE ? BLACK : WHITE;
+  const myMoves = validMoves(player, b);
+  const oppMoves = validMoves(opp, b);
+  const total = b.flat().filter(v=>v!==EMPTY).length;
+  const phase = total < 20 ? 'early' : total < 44 ? 'mid' : 'late';
+
+  const tips = [];
+
+  // ── Corner grabs ──
+  const freeCorners = CORNERS.filter(([r,c])=>b[r][c]===EMPTY);
+  const myCornerMoves = myMoves.filter(([r,c])=>CORNERS.some(([cr,cc])=>cr===r&&cc===c));
+  if(myCornerMoves.length > 0){
+    tips.push({ type:'good', emoji:'🏆', text:`<strong>Grab a corner!</strong> You can take ${myCornerMoves.length === 1 ? 'a corner' : myCornerMoves.length + ' corners'} right now. Corners can never be flipped — always take them.` });
+  }
+
+  // ── X-square danger ──
+  const dangerousXMoves = myMoves.filter(([r,c])=>{
+    if(cellType(r,c)!=='x-square') return false;
+    // Only warn if the adjacent corner is still free
+    const adjCorner = CORNERS.find(([cr,cc])=>Math.abs(cr-r)===1&&Math.abs(cc-c)===1);
+    return adjCorner && b[adjCorner[0]][adjCorner[1]]===EMPTY;
+  });
+  if(dangerousXMoves.length > 0 && myCornerMoves.length === 0){
+    tips.push({ type:'urgent', emoji:'⚠️', text:`<strong>Avoid the X-squares!</strong> Playing on a diagonal-corner square hands your opponent a corner. Skip those moves if you can.` });
+  }
+
+  // ── C-square danger ──
+  const dangerousCMoves = myMoves.filter(([r,c])=>{
+    if(cellType(r,c)!=='c-square') return false;
+    const adjCorner = CORNERS.find(([cr,cc])=>(cr===r||cc===c)&&Math.abs(cr-r)+Math.abs(cc-c)===1);
+    return adjCorner && b[adjCorner[0]][adjCorner[1]]===EMPTY;
+  });
+  if(dangerousCMoves.length > 0 && myCornerMoves.length === 0 && dangerousXMoves.length === 0){
+    tips.push({ type:'urgent', emoji:'🚧', text:`<strong>Watch the C-squares.</strong> Edge squares next to a corner let your opponent slip into the corner. Avoid them while corners are free.` });
+  }
+
+  // ── Mobility ──
+  const mobilityDiff = myMoves.length - oppMoves.length;
+  if(phase !== 'late'){
+    if(mobilityDiff >= 3){
+      tips.push({ type:'good', emoji:'🚀', text:`<strong>Great mobility.</strong> You have ${myMoves.length} moves vs your opponent's ${oppMoves.length}. More options means more control — keep it up.` });
+    } else if(mobilityDiff <= -3){
+      tips.push({ type:'urgent', emoji:'🔒', text:`<strong>You're getting squeezed.</strong> Your opponent has far more moves. Try plays that open your options while limiting theirs.` });
+    } else if(phase==='early'){
+      tips.push({ type:'neutral', emoji:'🧭', text:`<strong>Early game:</strong> Focus on the centre and keeping your options open. Avoid edges and corners until you can secure them.` });
+    }
+  }
+
+  // ── Disc count trap ──
+  const myCount = b.flat().filter(v=>v===player).length;
+  const oppCount = b.flat().filter(v=>v===opp).length;
+  if(phase==='early' && myCount > oppCount + 6){
+    tips.push({ type:'urgent', emoji:'🪤', text:`<strong>Too many discs early on</strong> is a trap. Big leads in the opening get reversed. Prefer moves that flip fewer pieces and build stable edges.` });
+  }
+
+  // ── Stable edges ──
+  const myEdge = [];
+  for(let c=0;c<8;c++){ if(b[0][c]===player) myEdge.push(1); if(b[7][c]===player) myEdge.push(1); }
+  for(let r=0;r<8;r++){ if(b[r][0]===player) myEdge.push(1); if(b[r][7]===player) myEdge.push(1); }
+  if(myEdge.length >= 4 && phase==='mid'){
+    tips.push({ type:'good', emoji:'🧱', text:`<strong>Good edge control.</strong> Edge discs are hard to flip. Build connected runs along the border to create a stable foundation.` });
+  }
+
+  // ── Late game ──
+  if(phase==='late'){
+    tips.push({ type: myCount >= oppCount ? 'good' : 'urgent', emoji:'🏁', text:`<strong>Endgame — disc count matters now.</strong> You have ${myCount} vs ${oppCount}. Every flip counts. Look for moves that flip the most.` });
+  }
+
+  // ── Parity tip (mid) ──
+  if(phase==='mid' && myMoves.length > 0 && oppMoves.length > 0){
+    const edgeMoves = myMoves.filter(([r,c])=>cellType(r,c)==='edge' && !dangerousCMoves.some(([dr,dc])=>dr===r&&dc===c));
+    if(edgeMoves.length > 0 && myCornerMoves.length===0){
+      tips.push({ type:'neutral', emoji:'📐', text:`<strong>Build along the edges.</strong> Non-corner edge squares become stable once you own the corner at that end. Plan ahead.` });
+    }
+  }
+
+  // Fallback
+  if(tips.length === 0){
+    tips.push({ type:'neutral', emoji:'🤔', text:`<strong>Think ahead.</strong> Ask: does this move give my opponent a corner or X-square? Prioritise stability over raw disc count.` });
+  }
+
+  return tips.slice(0, 3);
+}
+
+function renderTips(){
+  if(mode==='2p') return; // only show in vs AI mode
+  const player = BLACK; // player is always black
+  if(isAiTurn() || aiThinking) return;
+
+  const tips = getTips(board, player);
+  const body = document.getElementById('tip-body');
+  body.innerHTML = tips.map(t=>`
+    <div class="tip-card ${t.type}">
+      <span class="tip-emoji">${t.emoji}</span>
+      <span class="tip-text">${t.text}</span>
+    </div>
+  `).join('');
 }
 
 // ── UI wiring ─────────────────────────────────────────────────
@@ -706,6 +921,9 @@ document.getElementById('btn-hints').addEventListener('click',()=>{
   showHints=!showHints;
   document.getElementById('btn-hints').textContent=showHints?'Hints: On':'Hints: Off';
   render();
+});
+document.getElementById('tip-toggle-btn').addEventListener('click',()=>{
+  document.getElementById('tip-panel').classList.toggle('open');
 });
 
 newGame();

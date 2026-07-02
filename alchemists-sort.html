@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Alchemist's Sort</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #080612;
+  font-family: Arial, sans-serif;
+  color: #e8d8ff;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  overflow-x: hidden;
+}
+#bg { position:fixed;inset:0;z-index:-1;
+  background:radial-gradient(ellipse at 50% 12%,#1d0f3e 0%,#06040f 72%); }
+
+h1 { font-size:1.15rem;font-weight:bold;color:#d0b8ff;
+  letter-spacing:.12em;padding:11px 20px 0;text-align:center;
+  text-shadow:0 0 16px rgba(180,120,255,.5); }
+#sub { font-size:.62rem;color:#5a4478;text-align:center;
+  padding-bottom:3px;font-style:italic; }
+
+#hud { display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:3px 0 2px; }
+.hs { background:rgba(140,90,255,.09);border:1px solid rgba(160,100,255,.22);
+  border-radius:6px;padding:3px 10px;font-size:.6rem;color:#c0a8ee;
+  text-align:center;min-width:54px; }
+.hs span { display:block;font-size:.85rem;color:#ddc8ff;font-weight:bold; }
+
+#actions { display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:3px 0 7px; }
+.btn { font-size:.6rem;letter-spacing:.05em;padding:6px 10px;
+  border-radius:5px;border:1px solid;cursor:pointer;
+  text-transform:uppercase;background:rgba(0,0,0,.5);color:inherit;
+  font-family:Arial,sans-serif; }
+.btn-undo{border-color:#cc8833;color:#ffbb55;}
+.btn-vial{border-color:#33aa77;color:#55ffaa;}
+.btn-hint{border-color:#4466dd;color:#88aaff;}
+.btn-new {border-color:#aa3355;color:#ff6688;}
+
+#board {
+  display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;
+  gap:14px 12px;padding:4px 8px 30px;
+  max-width:920px;width:100%;
+  position:relative;z-index:1;
+}
+
+.tw {
+  display:flex;flex-direction:column;align-items:center;
+  gap:3px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  position:relative;z-index:2;
+}
+.tlbl{font-size:.54rem;color:#3a2858;letter-spacing:.08em;}
+
+.tw.shake{-webkit-animation:shk .34s ease;animation:shk .34s ease;}
+@keyframes shk{
+  0%,100%{transform:translateX(0);}
+  20%{transform:translateX(-7px) rotate(-2.5deg);}
+  40%{transform:translateX(7px)  rotate(2.5deg);}
+  60%{transform:translateX(-4px);}
+  80%{transform:translateX(4px);}
+}
+
+#fly-tube {
+  position:fixed;top:0;left:0;pointer-events:none;z-index:900;display:none;
+  -webkit-transform-origin:50% 0%;transform-origin:50% 0%;
+}
+#stream-canvas { position:fixed;top:0;left:0;pointer-events:none;z-index:850;display:none; }
+
+#ov{display:none;position:fixed;inset:0;z-index:999;
+  background:rgba(5,3,15,.93);
+  flex-direction:column;align-items:center;justify-content:center;gap:13px;}
+#ov.show{display:flex;}
+#ov h2{font-size:1.5rem;color:#ddc8ff;text-align:center;
+  text-shadow:0 0 20px rgba(180,120,255,.7);}
+#ov p{color:#9a88bb;font-size:.82rem;text-align:center;max-width:300px;font-style:italic;}
+
+#toast{position:fixed;bottom:16px;left:50%;
+  transform:translateX(-50%) translateY(70px);
+  background:rgba(8,4,22,.97);border:1px solid #8855cc;
+  color:#d0b8ff;padding:7px 18px;border-radius:5px;
+  font-size:.7rem;z-index:700;white-space:nowrap;
+  -webkit-transition:-webkit-transform .22s ease;transition:transform .22s ease;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<h1>&#9877; ALCHEMIST'S SORT</h1>
+<p id="sub">Tap a vessel then tap where to pour</p>
+<div id="hud">
+  <div class="hs">Level<span id="sl">1</span></div>
+  <div class="hs">Moves<span id="sm">0</span></div>
+  <div class="hs">Done<span id="sd">0/0</span></div>
+  <div class="hs">Extras<span id="se">1</span></div>
+</div>
+<div id="actions">
+  <button class="btn btn-undo" onclick="undoMove()">&#8617; Undo</button>
+  <button class="btn btn-vial" id="bex" onclick="addVial()">+ Vessel</button>
+  <button class="btn btn-hint" onclick="doHint()">&#10022; Hint</button>
+  <button class="btn btn-new"  onclick="restart()">&#9877; Restart</button>
+</div>
+<div id="board"></div>
+
+<canvas id="fly-tube"></canvas>
+<canvas id="stream-canvas"></canvas>
+
+<div id="ov">
+  <h2 id="ovh">&#10022; LEVEL COMPLETE &#10022;</h2>
+  <p id="ovm"></p>
+  <button class="btn btn-vial" id="ovbtn" style="font-size:.85rem;padding:10px 22px" onclick="ovAction()">Next Level</button>
+</div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+// PALETTE — diametrically opposed colors
+// ═══════════════════════════════════════════════
+var PAL = [
+  {id:'RED',     hi:'#ff3344',mid:'#cc0011',lo:'#660006', r:255,g:30, b:40,  name:'RED'    },
+  {id:'CYAN',    hi:'#33fff0',mid:'#00bbcc',lo:'#004a55', r:0,  g:220,b:220, name:'CYAN'   },
+  {id:'ORANGE',  hi:'#ff9922',mid:'#dd5500',lo:'#7a2800', r:255,g:110,b:10,  name:'ORANGE' },
+  {id:'BLUE',    hi:'#3366ff',mid:'#0033cc',lo:'#000d66', r:30, g:70, b:255, name:'BLUE'   },
+  {id:'YELLOW',  hi:'#ffee33',mid:'#ccaa00',lo:'#665500', r:255,g:230,b:20,  name:'YELLOW' },
+  {id:'VIOLET',  hi:'#d033ff',mid:'#9900cc',lo:'#440066', r:185,g:20, b:255, name:'VIOLET' },
+  {id:'LIME',    hi:'#88ff22',mid:'#44cc00',lo:'#1a5000', r:110,g:255,b:20,  name:'LIME'   },
+  {id:'MAGENTA', hi:'#ff33c0',mid:'#cc0088',lo:'#5a0033', r:255,g:20, b:175, name:'MAGENTA'}
+];
+
+// ═══════════════════════════════════════════════
+// VESSEL SHAPES
+// Each shape lives in a normalized canvas (CW x CH).
+// Provides: path(ctx), yBottom/yTop, segH, widthAt(y), leftAt(y).
+// Liquid bands sample widthAt so they hug curved/tapered walls.
+// All paths use lines/arcs/quadratics — NO ctx.ellipse.
+// ═══════════════════════════════════════════════
+var CW = 50, CH = 240, TS = 5;   // taller vessels
+
+function makeVessel(kind){
+  var cx = CW/2;
+  if(kind==='tube'){
+    var w=30, r=w/2, x=cx-r, lip=6;
+    var yb=CH - r - 4, yt=lip, ch=yb-yt;
+    return {
+      kind:kind, cx:cx, yBottom:yb, yTop:yt, segH:ch/TS,
+      widthAt:function(y){return w;}, leftAt:function(y){return x;},
+      path:function(ctx){
+        ctx.beginPath();
+        ctx.moveTo(x, lip);
+        ctx.arcTo(x,0,cx,0,lip);
+        ctx.arcTo(x+w,0,x+w,lip,lip);
+        ctx.lineTo(x+w, yb);
+        ctx.arc(cx, yb, r, 0, Math.PI, false);
+        ctx.lineTo(x, lip);
+        ctx.closePath();
+      }
+    };
+  }
+  if(kind==='beaker'){
+    var bw=38, bx=cx-bw/2, byb=CH-8, byt=30, bch=byb-byt, bbr=5;
+    return {
+      kind:kind, cx:cx, yBottom:byb, yTop:byt, segH:bch/TS,
+      widthAt:function(y){return bw;}, leftAt:function(y){return bx;},
+      path:function(ctx){
+        ctx.beginPath();
+        ctx.moveTo(bx-3, byt-2);
+        ctx.lineTo(bx+3, byt+3);
+        ctx.lineTo(bx, byt+4);
+        ctx.lineTo(bx, byb-bbr);
+        ctx.arcTo(bx, byb, bx+bbr, byb, bbr);
+        ctx.lineTo(bx+bw-bbr, byb);
+        ctx.arcTo(bx+bw, byb, bx+bw, byb-bbr, bbr);
+        ctx.lineTo(bx+bw, byt+4);
+        ctx.lineTo(bx+bw-1, byt+2);
+        ctx.closePath();
+      }
+    };
+  }
+  if(kind==='flask'){
+    var neckW=16, baseW=42, neckX=cx-neckW/2;
+    var fyb=CH-8, fyt=16, neckBot=92, fch=fyb-fyt;
+    return {
+      kind:kind, cx:cx, yBottom:fyb, yTop:fyt, segH:fch/TS,
+      widthAt:function(y){
+        if(y<=neckBot) return neckW;
+        var t=(y-neckBot)/(fyb-neckBot); if(t>1)t=1;
+        return neckW+(baseW-neckW)*t;
+      },
+      leftAt:function(y){ return cx - this.widthAt(y)/2; },
+      path:function(ctx){
+        ctx.beginPath();
+        ctx.moveTo(neckX, fyt);
+        ctx.arcTo(neckX, fyt-6, cx, fyt-6, 5);
+        ctx.arcTo(neckX+neckW, fyt-6, neckX+neckW, fyt, 5);
+        ctx.lineTo(neckX+neckW, neckBot);
+        ctx.lineTo(cx+baseW/2, fyb-4);
+        ctx.arcTo(cx+baseW/2, fyb, cx+baseW/2-4, fyb, 4);
+        ctx.lineTo(cx-baseW/2+4, fyb);
+        ctx.arcTo(cx-baseW/2, fyb, cx-baseW/2, fyb-4, 4);
+        ctx.lineTo(neckX, neckBot);
+        ctx.closePath();
+      }
+    };
+  }
+  // jar
+  var jw=40, jx=cx-jw/2, jyb=CH-6, jyt=40, jch=jyb-jyt, jbr=8;
+  return {
+    kind:'jar', cx:cx, yBottom:jyb, yTop:jyt, segH:jch/TS,
+    widthAt:function(y){return jw;}, leftAt:function(y){return jx;},
+    path:function(ctx){
+      ctx.beginPath();
+      ctx.moveTo(jx, jyt+2);
+      ctx.arcTo(jx, jyt-4, cx, jyt-4, 6);
+      ctx.arcTo(jx+jw, jyt-4, jx+jw, jyt+2, 6);
+      ctx.lineTo(jx+jw, jyb-jbr);
+      ctx.arcTo(jx+jw, jyb, jx+jw-jbr, jyb, jbr);
+      ctx.lineTo(jx+jbr, jyb);
+      ctx.arcTo(jx, jyb, jx, jyb-jbr, jbr);
+      ctx.closePath();
+    }
+  };
+}
+
+var SHAPE_KINDS = ['tube','beaker','flask','jar'];
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+var vials=[], shapes=[];
+var sel=null, moves=0, extras=1, level=1;
+var hist=[], hint=null, done=[], busy=false;
+var flyRAF=0;
+var fillIdx=-1, fillBase=null, fillColor=null, fillFrac=0, fillSegs=0;
+var wobble={};
+var bubbles=[], bubbleRAF=0, lastBub=0;
+
+function isDone(i){for(var j=0;j<done.length;j++)if(done[j]===i)return true;return false;}
+
+// ═══════════════════════════════════════════════
+// LEVEL / SETUP
+// ═══════════════════════════════════════════════
+function colorsForLevel(L){
+  var n=4+Math.floor((L-1)/2);
+  if(n>8) n=8;
+  return n;
+}
+function extrasForLevel(L){
+  return Math.min(3, 2 + Math.floor((L-1)/4));
+}
+
+function restart(){ level=1; document.getElementById('ov').className=''; buildLevel(); }
+
+function buildLevel(){
+  cancelAnimationFrame(flyRAF);
+  hideStream();
+  document.getElementById('fly-tube').style.display='none';
+
+  var nc=colorsForLevel(level), ne=extrasForLevel(level);
+  moves=0; extras=1; sel=null; hist=[]; hint=null; done=[]; busy=false;
+  fillIdx=-1; fillBase=null; fillColor=null; fillFrac=0; fillSegs=0;
+  wobble={};
+  document.getElementById('ov').className='';
+
+  var pal=shuffle(PAL.slice()).slice(0,nc);
+  var pool=[];
+  for(var pi=0;pi<pal.length;pi++)
+    for(var si=0;si<TS;si++) pool.push(pal[pi].id);
+  pool=shuffle(pool);
+
+  vials=[];
+  for(var i=0;i<nc;i++) vials.push(pool.splice(0,TS));
+  for(var e=0;e<ne;e++) vials.push([]);
+  vials=shuffle(vials);
+
+  shapes=[];
+  for(var v=0;v<vials.length;v++)
+    shapes.push(makeVessel(SHAPE_KINDS[Math.floor(Math.random()*SHAPE_KINDS.length)]));
+
+  initBubbles();
+  updateHUD(); render();
+  if(!bubbleRAF) bubbleRAF=requestAnimationFrame(bubbleTick);
+}
+
+// ═══════════════════════════════════════════════
+// BUBBLES
+// ═══════════════════════════════════════════════
+function initBubbles(){
+  bubbles=[];
+  for(var i=0;i<vials.length;i++) bubbles.push([]);
+}
+function seedBubble(i){
+  var sh=shapes[i]; if(!sh) return;
+  var n=vials[i].length; if(n<=0) return;
+  var surfaceY=sh.yBottom - n*sh.segH;
+  var y=sh.yBottom - Math.random()*(sh.yBottom-surfaceY);
+  var halfW=sh.widthAt(y)/2 - 3;
+  var x=sh.cx + (Math.random()*2-1)*halfW;
+  bubbles[i].push({x:x,y:y,r:0.8+Math.random()*1.6,sp:0.18+Math.random()*0.4,life:0});
+}
+function bubbleTick(ts){
+  if(!lastBub) lastBub=ts;
+  var dt=ts-lastBub; lastBub=ts;
+  for(var i=0;i<vials.length;i++){
+    if(vials[i].length>0 && !isDone(i) && Math.random()<0.02) seedBubble(i);
+    var arr=bubbles[i]; if(!arr) continue;
+    var sh=shapes[i];
+    var surfaceY=sh.yBottom - vials[i].length*sh.segH;
+    for(var b=arr.length-1;b>=0;b--){
+      arr[b].y -= arr[b].sp*(dt/16);
+      arr[b].life += dt;
+      if(arr[b].y<=surfaceY+2 || arr[b].life>4000) arr.splice(b,1);
+    }
+  }
+  for(var i2=0;i2<vials.length;i2++){
+    if(i2===fillIdx) continue;
+    var hasB=bubbles[i2] && bubbles[i2].length>0;
+    var hasW=wobble[i2]!==undefined;
+    if(hasB||hasW){
+      var w=getWrap(i2);
+      if(w){var c=w.querySelector('canvas'); if(c) drawVessel(c.getContext('2d'),i2);}
+      if(hasW && (ts-wobble[i2].t0)>650) delete wobble[i2];
+    }
+  }
+  bubbleRAF=requestAnimationFrame(bubbleTick);
+}
+
+// ═══════════════════════════════════════════════
+// LOGIC
+// ═══════════════════════════════════════════════
+function topOf(v){return v.length?v[v.length-1]:null;}
+function canPour(f,t){
+  if(f===t||!vials[f].length||vials[t].length>=TS)return false;
+  var tt=topOf(vials[t]);
+  return tt===null||tt===topOf(vials[f]);
+}
+function numPour(f){
+  if(!vials[f].length)return 0;
+  var c=topOf(vials[f]),n=0;
+  for(var i=vials[f].length-1;i>=0;i--){if(vials[f][i]===c)n++;else break;}
+  return n;
+}
+function isComp(v){
+  if(v.length!==TS)return false;
+  for(var i=1;i<v.length;i++)if(v[i]!==v[0])return false;
+  return true;
+}
+function checkWin(){
+  for(var i=0;i<vials.length;i++)if(vials[i].length>0&&!isComp(vials[i]))return false;
+  return true;
+}
+function cloneVials(){var out=[];for(var i=0;i<vials.length;i++)out.push(vials[i].slice());return out;}
+function commitPour(f,t){
+  var act=Math.min(numPour(f),TS-vials[t].length);
+  for(var i=0;i<act;i++)vials[t].push(vials[f].pop());
+  moves++;
+}
+
+// ═══════════════════════════════════════════════
+// CLICK
+// ═══════════════════════════════════════════════
+function clickTube(idx){
+  if(busy)return;
+  hint=null;
+  if(sel===null){
+    if(!vials[idx].length){toast('Empty vessel.');return;}
+    if(isDone(idx)){toast('Vessel is sealed.');return;}
+    sel=idx;render();return;
+  }
+  if(sel===idx){sel=null;render();return;}
+  if(canPour(sel,idx)){
+    var f=sel,t=idx;sel=null;startPour(f,t);
+  } else {
+    if(vials[idx].length&&!isDone(idx)){sel=idx;render();}
+    else{doShake(idx);sel=null;render();}
+  }
+}
+
+function undoMove(){
+  if(busy)return;
+  if(!hist.length){toast('Nothing to undo.');return;}
+  vials=hist.pop();sel=null;moves=Math.max(0,moves-1);hint=null;
+  done=[];for(var i=0;i<vials.length;i++)if(isComp(vials[i]))done.push(i);
+  updateHUD();render();
+}
+function addVial(){
+  if(busy)return;
+  if(extras<=0){toast('No extras left.');return;}
+  extras--;
+  vials.push([]);
+  shapes.push(makeVessel(SHAPE_KINDS[Math.floor(Math.random()*SHAPE_KINDS.length)]));
+  bubbles.push([]);
+  sel=null;updateHUD();render();
+}
+function doHint(){
+  if(busy)return;
+  var f,t;
+  for(f=0;f<vials.length;f++){
+    if(!vials[f].length||isDone(f))continue;
+    for(t=0;t<vials.length;t++){
+      if(canPour(f,t)&&vials[t].length>0){hint=f;render();toast('#'+(f+1)+' -> #'+(t+1));return;}
+    }
+  }
+  for(f=0;f<vials.length;f++){
+    if(!vials[f].length||isDone(f))continue;
+    for(t=0;t<vials.length;t++){
+      if(canPour(f,t)){hint=f;render();toast('#'+(f+1)+' -> #'+(t+1));return;}
+    }
+  }
+  toast('No moves — try undo.');
+}
+function doShake(idx){
+  var el=getWrap(idx);if(!el)return;
+  el.className='tw';var x=el.offsetWidth;
+  el.className='tw shake';
+  setTimeout(function(){el.className='tw';},380);
+}
+
+// ═══════════════════════════════════════════════
+// POUR ANIMATION
+// ═══════════════════════════════════════════════
+function startPour(f, t){
+  busy=true;
+  hist.push(cloneVials());
+  if(hist.length>40) hist.shift();
+
+  var col=getPal(topOf(vials[f]));
+  var fEl=getWrap(f), tEl=getWrap(t);
+  if(!col||!fEl||!tEl){commitPour(f,t);finishPour(f,t);return;}
+
+  var fCV=fEl.querySelector('canvas'), tCV=tEl.querySelector('canvas');
+  var fR=fCV.getBoundingClientRect(), tR=tCV.getBoundingClientRect();
+  var pxW=fR.width, pxH=fR.height;
+
+  fCV.style.visibility='hidden';
+
+  var numSegs=Math.min(numPour(f), TS-vials[t].length);
+  fillIdx=t; fillBase=vials[t].slice(); fillColor=topOf(vials[f]);
+  fillSegs=numSegs; fillFrac=0;
+  drawVessel(tCV.getContext('2d'), t);
+
+  var fly=document.getElementById('fly-tube');
+  fly.width=CW; fly.height=CH;
+  fly.style.width=pxW+'px'; fly.style.height=pxH+'px';
+  fly.style.display='block';
+  fly.style.webkitTransformOrigin='50% 0%'; fly.style.transformOrigin='50% 0%';
+  fly.style.left=fR.left+'px'; fly.style.top=fR.top+'px';
+  fly.style.webkitTransform='rotate(0deg)'; fly.style.transform='rotate(0deg)';
+  drawVessel(fly.getContext('2d'), f);
+
+  var destCX=tR.left+tR.width*0.5, srcCX=fR.left+fR.width*0.5;
+  var goLeft=destCX<srcCX;
+  var tiltDeg=goLeft?-62:62;
+  var mouthTargetX=destCX+(goLeft? pxW*0.34 : -pxW*0.34);
+  var mouthTargetY=tR.top - pxH*0.30;
+  var hoverLeft=mouthTargetX-pxW*0.5, hoverTop=mouthTargetY;
+  var streamSrcX=mouthTargetX, streamSrcY=mouthTargetY, streamDstX=destCX;
+  var scaleY=tR.height/CH;
+  var tShape=shapes[t];
+
+  var sc=document.getElementById('stream-canvas');
+  sc.width=window.innerWidth; sc.height=window.innerHeight;
+  sc.style.width=window.innerWidth+'px'; sc.style.height=window.innerHeight+'px';
+  sc.style.display='none';
+
+  var startTs=null;
+  var T_MOVE=300, T_TILT=240, T_POUR=380, T_RETURN=220;
+  var TOTAL=T_MOVE+T_TILT+T_POUR+T_RETURN;
+
+  function destSurfaceY(filledSegs){
+    var topSeg=fillBase.length+filledSegs;
+    var segTopCanvas=tShape.yBottom - topSeg*tShape.segH;
+    return tR.top + segTopCanvas*scaleY;
+  }
+
+  function frame(ts){
+    if(!startTs) startTs=ts;
+    var e=ts-startTs;
+    var p, angle, alpha, landY;
+
+    if(e<T_MOVE){
+      p=easeInOut(e/T_MOVE);
+      var cx=fR.left+(hoverLeft-fR.left)*p;
+      var cy=fR.top +(hoverTop -fR.top )*p;
+      cy-=Math.sin(p*Math.PI)*34;
+      fly.style.left=cx+'px'; fly.style.top=cy+'px';
+      fly.style.webkitTransform='rotate(0deg)'; fly.style.transform='rotate(0deg)';
+      sc.style.display='none';
+
+    } else if(e<T_MOVE+T_TILT){
+      p=easeOut((e-T_MOVE)/T_TILT);
+      angle=tiltDeg*p;
+      fly.style.left=hoverLeft+'px'; fly.style.top=hoverTop+'px';
+      fly.style.webkitTransform='rotate('+angle+'deg)'; fly.style.transform='rotate('+angle+'deg)';
+      alpha=p<0.55?0:((p-0.55)/0.45);
+      if(alpha>0){sc.style.display='block'; landY=destSurfaceY(0);
+        drawStream(sc,streamSrcX,streamSrcY,streamDstX,landY,col,fillSegs,alpha,ts);
+      } else sc.style.display='none';
+
+    } else if(e<T_MOVE+T_TILT+T_POUR){
+      fly.style.left=hoverLeft+'px'; fly.style.top=hoverTop+'px';
+      fly.style.webkitTransform='rotate('+tiltDeg+'deg)'; fly.style.transform='rotate('+tiltDeg+'deg)';
+      var dp=(e-T_MOVE-T_TILT)/T_POUR; if(dp>1)dp=1;
+      var drained=Math.floor(dp*fillSegs+0.0001);
+      drawVesselDrained(fly.getContext('2d'), f, drained);
+      fillFrac=dp*fillSegs;
+      drawVessel(tCV.getContext('2d'), t);
+      sc.style.display='block';
+      landY=destSurfaceY(Math.floor(fillFrac));
+      drawStream(sc,streamSrcX,streamSrcY,streamDstX,landY,col,fillSegs,1.0,ts);
+
+    } else if(e<TOTAL){
+      p=easeInOut((e-T_MOVE-T_TILT-T_POUR)/T_RETURN);
+      angle=tiltDeg*(1-p);
+      fly.style.left=hoverLeft+'px'; fly.style.top=hoverTop+'px';
+      fly.style.webkitTransform='rotate('+angle+'deg)'; fly.style.transform='rotate('+angle+'deg)';
+      fillFrac=fillSegs;
+      alpha=1-p;
+      if(alpha>0.02){sc.style.display='block'; landY=destSurfaceY(fillSegs);
+        drawStream(sc,streamSrcX,streamSrcY,streamDstX,landY,col,fillSegs,alpha,ts);
+      } else sc.style.display='none';
+
+    } else {
+      fly.style.display='none';
+      fCV.style.visibility='visible';
+      hideStream();
+      fillIdx=-1; fillBase=null; fillColor=null; fillFrac=0; fillSegs=0;
+      commitPour(f,t);
+      wobble[t]={t0:performance.now(), amp:3.2};
+      finishPour(f,t);
+      return;
+    }
+    flyRAF=requestAnimationFrame(frame);
+  }
+  flyRAF=requestAnimationFrame(frame);
+}
+
+function drawStream(sc, sx, sy, dx, dy, col, segs, alpha, ts){
+  var ctx=sc.getContext('2d');
+  ctx.clearRect(0,0,sc.width,sc.height);
+  if(alpha<=0) return;
+  if(dy<sy) dy=sy+4;
+
+  var sw=4+segs*1.3;
+  var midX=sx+4, midY=(sy+dy)*0.5;
+
+  ctx.save();
+  ctx.globalAlpha=alpha*0.26;
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(midX,midY,dx,dy);
+  ctx.strokeStyle='rgba('+col.r+','+col.g+','+col.b+',1)'; ctx.lineWidth=sw*3.4; ctx.lineCap='round'; ctx.stroke();
+  ctx.globalAlpha=alpha*0.45;
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(midX,midY,dx,dy);
+  ctx.strokeStyle=col.hi; ctx.lineWidth=sw*1.8; ctx.stroke();
+  ctx.globalAlpha=alpha;
+  var grad=ctx.createLinearGradient(sx,sy,dx,dy);
+  grad.addColorStop(0,col.hi); grad.addColorStop(0.45,col.mid); grad.addColorStop(1,col.lo);
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(midX,midY,dx,dy);
+  ctx.strokeStyle=grad; ctx.lineWidth=sw; ctx.lineCap='round'; ctx.stroke();
+  ctx.globalAlpha=alpha*0.7;
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(midX,midY,dx,dy);
+  ctx.strokeStyle='rgba(255,255,255,0.65)'; ctx.lineWidth=sw*0.28; ctx.stroke();
+
+  ctx.globalAlpha=alpha*0.85;
+  var br=sw*1.1;
+  var bg=ctx.createRadialGradient(dx,dy,0,dx,dy,br*2.2);
+  bg.addColorStop(0,col.hi); bg.addColorStop(0.5,col.mid); bg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(dx,dy,br*2.2,0,Math.PI*2); ctx.fill();
+
+  var ph=((ts||0)/260)%1;
+  ctx.fillStyle=col.hi;
+  for(var d=0; d<3; d++){
+    var fr=(ph + d/3)%1;
+    var px=sx+(dx-sx)*fr + Math.sin(fr*6)*1.5;
+    var py=sy+(dy-sy)*fr;
+    ctx.globalAlpha=alpha*(0.8-fr*0.4);
+    ctx.beginPath(); ctx.arc(px,py,sw*(0.34-fr*0.12),0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function hideStream(){
+  var sc=document.getElementById('stream-canvas');
+  sc.style.display='none';
+  sc.getContext('2d').clearRect(0,0,sc.width,sc.height);
+}
+
+function finishPour(f,t){
+  var newDone=[];
+  for(var i=0;i<vials.length;i++){
+    if(isComp(vials[i])&&!isDone(i)){done.push(i);newDone.push(i);}
+  }
+  updateHUD();render();busy=false;
+  for(var ni=0;ni<newDone.length;ni++){
+    (function(idx){setTimeout(function(){animCork(idx);},80);})(newDone[ni]);
+  }
+  if(checkWin()) setTimeout(showLevelComplete, newDone.length?700:300);
+}
+
+function easeInOut(t){return t<0.5?2*t*t:(1-Math.pow(-2*t+2,2)/2);}
+function easeOut(t){return 1-Math.pow(1-t,2);}
+
+// ═══════════════════════════════════════════════
+// CORK DROP
+// ═══════════════════════════════════════════════
+function animCork(idx){
+  var wrap=getWrap(idx);if(!wrap)return;
+  var cv=wrap.querySelector('canvas');if(!cv)return;
+  var rect=cv.getBoundingClientRect();
+  var sc=rect.width/CW;
+  var sh=shapes[idx];
+  var topW=sh.widthAt(sh.yTop);
+  var cw=(topW+3)*sc;
+  var cx=rect.left+(sh.cx-topW/2-1.5)*sc;
+  var targetY=rect.top + (sh.yTop-8)*sc;
+
+  var div=document.createElement('div');
+  div.style.position='fixed';
+  div.style.left=cx+'px';
+  div.style.top=(rect.top-52)+'px';
+  div.style.width=cw+'px';
+  div.style.height=(16*sc)+'px';
+  div.style.background='linear-gradient(180deg,#f0cf94 0%,#cf9a52 38%,#9c6526 72%,#6e3f12 100%)';
+  div.style.borderRadius='4px 4px 3px 3px';
+  div.style.border='1px solid rgba(40,18,0,.5)';
+  div.style.boxShadow='0 5px 12px rgba(0,0,0,.65)';
+  div.style.zIndex='600';
+  div.style.pointerEvents='none';
+  div.style.webkitTransition='top .3s cubic-bezier(.34,1.56,.64,1)';
+  div.style.transition='top .3s cubic-bezier(.34,1.56,.64,1)';
+  document.body.appendChild(div);
+  requestAnimationFrame(function(){requestAnimationFrame(function(){
+    div.style.top=targetY+'px';
+    setTimeout(function(){
+      div.style.opacity='0';
+      setTimeout(function(){
+        if(div.parentNode)div.parentNode.removeChild(div);
+        var w=getWrap(idx);
+        if(w){var c=w.querySelector('canvas');if(c)drawVessel(c.getContext('2d'),idx);}
+      },160);
+    },380);
+  });});
+}
+
+// ═══════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════
+function render(){
+  var board=document.getElementById('board');
+  board.innerHTML='';
+  for(var i=0;i<vials.length;i++){
+    var wrap=document.createElement('div');
+    wrap.className='tw'; wrap.setAttribute('data-i',i);
+    var cv=document.createElement('canvas');
+    cv.width=CW; cv.height=CH;
+    cv.style.width=CW+'px'; cv.style.height=CH+'px';
+    var lbl=document.createElement('div');
+    lbl.className='tlbl'; lbl.textContent='#'+(i+1);
+    wrap.appendChild(cv); wrap.appendChild(lbl);
+    ;(function(idx,canvas){
+      wrap.addEventListener('click',function(){clickTube(idx);});
+      drawVessel(canvas.getContext('2d'),idx);
+    })(i,cv);
+    board.appendChild(wrap);
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DRAW VESSEL — rich liquid look
+// ═══════════════════════════════════════════════
+function drawVessel(ctx, idx){
+  ctx.clearRect(0,0,CW,CH);
+  var sh=shapes[idx];
+  var isSel=(sel===idx), isD=isDone(idx), isHnt=(hint===idx);
+  var CX=sh.cx;
+
+  var segList, partialFrac=0, partialColor=null;
+  if(idx===fillIdx && fillColor!==null){
+    segList=fillBase.slice();
+    var whole=Math.floor(fillFrac);
+    for(var w=0;w<whole;w++) segList.push(fillColor);
+    partialFrac=fillFrac-whole;
+    if(partialFrac>0 && segList.length<TS) partialColor=fillColor;
+  } else segList=vials[idx];
+
+  var wob=0;
+  if(wobble[idx]!==undefined){
+    var el=performance.now()-wobble[idx].t0;
+    wob=Math.sin(el/55)*wobble[idx].amp*Math.exp(-el/260);
+  }
+
+  if(isSel||isHnt||isD){
+    var rgb=isD?'80,255,140':(isHnt?'80,140,255':'210,130,255');
+    var gl=ctx.createRadialGradient(CX,CH*0.5,4,CX,CH*0.5,CW*0.85);
+    gl.addColorStop(0,'rgba('+rgb+',0.30)'); gl.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(CX,CH*0.5,CW*0.85,0,Math.PI*2); ctx.fill();
+  }
+
+  ctx.save(); sh.path(ctx); ctx.clip();
+  var ig=ctx.createLinearGradient(0,0,CW,0);
+  ig.addColorStop(0,'#02110a'); ig.addColorStop(0.5,'#0a1d12'); ig.addColorStop(1,'#02110a');
+  ctx.fillStyle=ig; ctx.fillRect(0,0,CW,CH);
+  ctx.restore();
+
+  ctx.save(); sh.path(ctx); ctx.clip();
+  var nFull=segList.length;
+  for(var si=0; si<nFull; si++){
+    var col=getPal(segList[si]); if(!col) continue;
+    var bandBot=sh.yBottom - si*sh.segH;
+    var bandTop=bandBot - sh.segH;
+    var isTopBand=(si===nFull-1 && partialColor===null);
+    drawLiquidBand(ctx, sh, col, bandTop, bandBot, isTopBand, (isTopBand?wob:0));
+  }
+  if(partialColor!==null){
+    var pcol=getPal(partialColor);
+    if(pcol){
+      var pBot=sh.yBottom - nFull*sh.segH;
+      var pTop=pBot - sh.segH*partialFrac;
+      drawLiquidBand(ctx, sh, pcol, pTop, pBot, true, 0);
+    }
+  }
+  var arr=bubbles[idx];
+  if(arr){
+    for(var b=0;b<arr.length;b++){
+      var bb=arr[b];
+      ctx.globalAlpha=0.5;
+      ctx.beginPath(); ctx.arc(bb.x,bb.y,bb.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(bb.x-bb.r*0.3,bb.y-bb.r*0.3,bb.r*0.4,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  }
+  ctx.restore();
+
+  ctx.save(); sh.path(ctx); ctx.clip();
+  var lx=sh.leftAt(sh.yTop+20);
+  var lsh=ctx.createLinearGradient(lx,0,lx+18,0);
+  lsh.addColorStop(0,'rgba(255,255,255,0)');
+  lsh.addColorStop(0.12,'rgba(255,255,255,0.32)');
+  lsh.addColorStop(0.4,'rgba(255,255,255,0.06)');
+  lsh.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=lsh; ctx.fillRect(lx,0,18,CH);
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.fillRect(lx+5, sh.yTop+6, 1.4, (sh.yBottom-sh.yTop)*0.55);
+  ctx.restore();
+
+  ctx.save();
+  var rl=sh.leftAt(sh.yTop), rw=sh.widthAt(sh.yTop);
+  ctx.beginPath();
+  ctx.moveTo(rl, sh.yTop);
+  ctx.arcTo(rl, sh.yTop-6, sh.cx, sh.yTop-6, 5);
+  ctx.arcTo(rl+rw, sh.yTop-6, rl+rw, sh.yTop, 5);
+  ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.restore();
+
+  ctx.save(); sh.path(ctx);
+  ctx.strokeStyle=isD  ?'rgba(80,255,140,0.9)':
+                  isSel?'rgba(220,150,255,1.0)':
+                  isHnt?'rgba(80,140,255,0.92)':
+                        'rgba(170,210,190,0.4)';
+  ctx.lineWidth=(isSel||isD)?2.4:1.5; ctx.stroke();
+  ctx.restore();
+
+  if(segList.length>0 && !isD){
+    ctx.save();
+    ctx.font='bold 5.5px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    var labCol=partialColor!==null?partialColor:topOf(segList);
+    ctx.fillText(getPal(labCol).name, CX, sh.yTop-1);
+    ctx.restore();
+  }
+
+  if(isD) drawCork(ctx, sh);
+}
+
+function drawLiquidBand(ctx, sh, col, yTop, yBot, isTop, wob){
+  if(yBot<=yTop) return;
+  var steps=6;
+  ctx.beginPath();
+  for(var i=0;i<=steps;i++){
+    var y=yTop+(yBot-yTop)*(i/steps);
+    var rx=sh.leftAt(y)+sh.widthAt(y);
+    if(i===0) ctx.moveTo(rx,y); else ctx.lineTo(rx,y);
+  }
+  for(var j=steps;j>=0;j--){
+    var y2=yTop+(yBot-yTop)*(j/steps);
+    ctx.lineTo(sh.leftAt(y2),y2);
+  }
+  ctx.closePath();
+
+  var midY=(yTop+yBot)/2;
+  var gl=sh.leftAt(midY), gw=sh.widthAt(midY);
+  var hg=ctx.createLinearGradient(gl,0,gl+gw,0);
+  hg.addColorStop(0,col.lo);
+  hg.addColorStop(0.14,col.mid);
+  hg.addColorStop(0.36,col.hi);
+  hg.addColorStop(0.6,col.hi);
+  hg.addColorStop(0.86,col.mid);
+  hg.addColorStop(1,col.lo);
+  ctx.fillStyle=hg; ctx.fill();
+
+  var vg=ctx.createLinearGradient(0,yTop,0,yBot);
+  vg.addColorStop(0,'rgba(255,255,255,0.18)');
+  vg.addColorStop(0.35,'rgba(255,255,255,0.02)');
+  vg.addColorStop(1,'rgba(0,0,0,0.22)');
+  ctx.fillStyle=vg; ctx.fill();
+
+  var sepL=sh.leftAt(yBot), sepW=sh.widthAt(yBot);
+  ctx.beginPath(); ctx.moveTo(sepL+2,yBot); ctx.lineTo(sepL+sepW-2,yBot);
+  ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; ctx.stroke();
+
+  var surfY=yTop+wob;
+  var ml=sh.leftAt(surfY), mw=sh.widthAt(surfY), mcx=ml+mw/2, mrx=mw/2-2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(ml+2,surfY+1);
+  ctx.quadraticCurveTo(mcx, surfY-3.5, ml+mw-2, surfY+1);
+  ctx.quadraticCurveTo(mcx, surfY+2.5, ml+2, surfY+1);
+  ctx.closePath();
+  var msg=ctx.createLinearGradient(0,surfY-4,0,surfY+3);
+  msg.addColorStop(0,hexA(col.hi,0.9));
+  msg.addColorStop(1,hexA(col.mid,0.3));
+  ctx.fillStyle=msg; ctx.fill();
+  ctx.restore();
+
+  if(isTop){
+    var sg=ctx.createRadialGradient(mcx-mrx*0.3,surfY-1,0.5,mcx,surfY,mrx);
+    sg.addColorStop(0,'rgba(255,255,255,0.55)');
+    sg.addColorStop(0.5,hexA(col.hi,0.25));
+    sg.addColorStop(1,'rgba(0,0,0,0)');
+    ovalPath(ctx,mcx,surfY,mrx,3.5); ctx.fillStyle=sg; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(ml+3,surfY); ctx.lineTo(ml+mw-3,surfY);
+    ctx.strokeStyle=hexA(col.hi,0.7); ctx.lineWidth=0.8; ctx.stroke();
+  }
+}
+
+function drawVesselDrained(ctx, idx, drained){
+  var realVial=vials[idx];
+  if(drained<=0){ drawVessel(ctx,idx); return; }
+  var keep=Math.max(0, realVial.length-drained);
+  var saved=vials[idx];
+  vials[idx]=realVial.slice(0,keep);
+  drawVessel(ctx,idx);
+  vials[idx]=saved;
+}
+
+// ═══════════════════════════════════════════════
+// CORK
+// ═══════════════════════════════════════════════
+function drawCork(ctx, sh){
+  var cx=sh.cx;
+  var topW=sh.widthAt(sh.yTop);
+  var halfW=topW/2 - 0.5;
+  var corkTop=sh.yTop-8;
+  var corkBot=sh.yTop+9;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx-halfW, corkBot);
+  ctx.lineTo(cx-halfW, corkTop+3);
+  ctx.quadraticCurveTo(cx-halfW, corkTop, cx, corkTop);
+  ctx.quadraticCurveTo(cx+halfW, corkTop, cx+halfW, corkTop+3);
+  ctx.lineTo(cx+halfW, corkBot);
+  ctx.closePath();
+  ctx.clip();
+
+  var cg=ctx.createLinearGradient(cx-halfW,0,cx+halfW,0);
+  cg.addColorStop(0,'#5a3210'); cg.addColorStop(0.18,'#9c6526');
+  cg.addColorStop(0.42,'#e0b070'); cg.addColorStop(0.6,'#c89048');
+  cg.addColorStop(0.82,'#8a5318'); cg.addColorStop(1,'#4f2c0c');
+  ctx.fillStyle=cg; ctx.fillRect(cx-halfW,corkTop,halfW*2,corkBot-corkTop);
+
+  var tg=ctx.createLinearGradient(0,corkTop,0,corkTop+8);
+  tg.addColorStop(0,'rgba(255,235,200,0.55)'); tg.addColorStop(1,'rgba(255,235,200,0)');
+  ctx.fillStyle=tg; ctx.fillRect(cx-halfW,corkTop,halfW*2,10);
+
+  ctx.strokeStyle='rgba(90,48,12,0.4)'; ctx.lineWidth=0.6;
+  var gls=[corkTop+5,corkTop+8,corkTop+11,corkTop+14];
+  for(var g=0;g<gls.length;g++){
+    ctx.beginPath(); ctx.moveTo(cx-halfW+1,gls[g]); ctx.lineTo(cx+halfW-1,gls[g]); ctx.stroke();
+  }
+  ctx.fillStyle='rgba(70,38,8,0.35)';
+  var spk=[[-4,3],[3,6],[-2,9],[5,12],[-5,13],[1,4],[4,10]];
+  for(var s=0;s<spk.length;s++){
+    ctx.beginPath(); ctx.arc(cx+spk[s][0],corkTop+4+spk[s][1],0.8,0,Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.fillRect(cx-halfW,corkBot-2,halfW*2,2);
+  ctx.restore();
+
+  ovalPath(ctx,cx,corkTop+2,7,3.6);
+  var wg=ctx.createRadialGradient(cx-2,corkTop,0.5,cx,corkTop+2,7);
+  wg.addColorStop(0,'#ff4455'); wg.addColorStop(0.6,'#cc1122'); wg.addColorStop(1,'#7a0810');
+  ctx.fillStyle=wg; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx-1.5,corkTop+0.5,2,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,180,160,0.6)'; ctx.fill();
+}
+
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+function ovalPath(ctx,cx,cy,rx,ry){
+  var k=0.5523,kx=rx*k,ky=ry*k;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy-ry);
+  ctx.bezierCurveTo(cx+kx,cy-ry,cx+rx,cy-ky,cx+rx,cy);
+  ctx.bezierCurveTo(cx+rx,cy+ky,cx+kx,cy+ry,cx,cy+ry);
+  ctx.bezierCurveTo(cx-kx,cy+ry,cx-rx,cy+ky,cx-rx,cy);
+  ctx.bezierCurveTo(cx-rx,cy-ky,cx-kx,cy-ry,cx,cy-ry);
+  ctx.closePath();
+}
+function hexA(hex,a){
+  var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+function getPal(id){for(var i=0;i<PAL.length;i++)if(PAL[i].id===id)return PAL[i];return null;}
+function getWrap(idx){return document.querySelector('[data-i="'+idx+'"]');}
+function shuffle(a){
+  for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}
+  return a;
+}
+function updateHUD(){
+  document.getElementById('sl').textContent=level;
+  document.getElementById('sm').textContent=moves;
+  document.getElementById('se').textContent=extras;
+  document.getElementById('bex').disabled=(extras<=0);
+  document.getElementById('sd').textContent=done.length+'/'+vials.length;
+}
+
+// ═══════════════════════════════════════════════
+// LEVEL COMPLETE
+// ═══════════════════════════════════════════════
+function showLevelComplete(){
+  var ov=document.getElementById('ov');
+  document.getElementById('ovh').innerHTML='&#10022; LEVEL '+level+' COMPLETE &#10022;';
+  document.getElementById('ovm').textContent='Solved in '+moves+' moves. '+
+    'Level '+(level+1)+' brings '+colorsForLevel(level+1)+' elixirs.';
+  document.getElementById('ovbtn').textContent='Next Level';
+  ov.className='show';
+}
+function ovAction(){
+  level++;
+  document.getElementById('ov').className='';
+  buildLevel();
+}
+
+var toastT=0;
+function toast(msg){
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.className='show';
+  clearTimeout(toastT);
+  toastT=setTimeout(function(){el.className='';},2500);
+}
+
+// Boot
+buildLevel();
+</script>
+</body>
+</html>

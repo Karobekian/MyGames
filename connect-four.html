@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Four</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --border: #2a2a2a;
+    --accent: #e82127; --text: #f0f0f0; --muted: #666;
+    --p1: #e82127; --p2: #f5c518; --empty: #1e1e1e;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 20px; gap: 20px; }
+  header { text-align: center; }
+  .wordmark { font-size: 10px; font-weight: 600; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  h1 { font-size: 28px; font-weight: 300; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+
+  .status { font-size: 13px; color: var(--muted); letter-spacing: 0.1em;
+    text-transform: uppercase; min-height: 20px; text-align: center; transition: opacity 0.2s; }
+  .status .highlight { font-weight: 600; }
+  .status .p1 { color: var(--p1); }
+  .status .p2 { color: var(--p2); }
+
+  /* Preview piece that hovers above board */
+  .preview-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    padding: 0 16px;
+    width: calc(var(--cell-size, 52px) * 7 + 8px * 6 + 32px);
+    height: calc(var(--cell-size, 52px) + 8px);
+    align-items: end;
+  }
+  .preview-cell {
+    width: clamp(36px, 8vw, 60px);
+    height: clamp(36px, 8vw, 60px);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .preview-cell.active { opacity: 0.45; }
+  .preview-cell.p1 { background: var(--p1); }
+  .preview-cell.p2 { background: var(--p2); }
+
+  .board-wrap { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 16px; }
+  .board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+
+  .cell {
+    width: clamp(36px, 8vw, 60px);
+    height: clamp(36px, 8vw, 60px);
+    border-radius: 50%;
+    background: var(--empty);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .cell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.15s;
+  }
+  .cell:not(.p1):not(.p2):not(.no-hover):hover::after { background: rgba(255,255,255,0.06); }
+
+  /* Drop animation */
+  @keyframes drop-in {
+    0%   { transform: translateY(-320px); }
+    70%  { transform: translateY(8px); }
+    85%  { transform: translateY(-4px); }
+    100% { transform: translateY(0); }
+  }
+  .cell.p1, .cell.p2 {
+    cursor: default;
+  }
+  .cell.p1 { background: var(--p1); border-color: var(--p1); }
+  .cell.p2 { background: var(--p2); border-color: var(--p2); }
+  .cell.dropping {
+    animation: drop-in 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  /* Win pulse */
+  @keyframes win-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 12px 4px rgba(255,255,255,0.3); transform: scale(1); }
+    50%       { box-shadow: 0 0 0 4px #fff, 0 0 20px 8px rgba(255,255,255,0.5); transform: scale(1.08); }
+  }
+  .cell.win {
+    animation: win-pulse 0.8s ease-in-out infinite;
+  }
+
+  /* Column hover highlight strip */
+  .col-strip {
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .col-strip:hover .cell:not(.p1):not(.p2) {
+    border-color: #444;
+  }
+
+  .controls { display: flex; gap: 12px; }
+  button { background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase; padding: 10px 20px;
+    border-radius: 2px; cursor: pointer; transition: border-color 0.2s; }
+  button:hover { border-color: #555; }
+  .back { color: var(--muted); text-decoration: none; font-size: 11px;
+    letter-spacing: 0.15em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<header>
+  <p class="wordmark">Karobekian</p>
+  <h1>Connect <span>Four</span></h1>
+</header>
+<div id="status" class="status"></div>
+
+<!-- Preview row above board -->
+<div class="preview-row" id="preview">
+  <!-- 7 preview cells injected by JS -->
+</div>
+
+<div class="board-wrap">
+  <div class="board" id="board"></div>
+</div>
+<div class="controls">
+  <button onclick="resetGame()">New Game</button>
+</div>
+<a class="back" href="index.html">← All Games</a>
+
+<script>
+  const ROWS = 6, COLS = 7;
+  let board, currentPlayer, gameOver, dropping = false;
+
+  function resetGame() {
+    board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    currentPlayer = 1;
+    gameOver = false;
+    dropping = false;
+    buildPreview();
+    render();
+    setStatus();
+  }
+
+  function setStatus(winner) {
+    const el = document.getElementById('status');
+    if (winner === 'draw') { el.innerHTML = 'Draw — play again!'; return; }
+    if (winner) {
+      const cls = winner === 1 ? 'p1' : 'p2';
+      el.innerHTML = `<span class="highlight ${cls}">Player ${winner}</span> wins!`;
+      return;
+    }
+    const cls = currentPlayer === 1 ? 'p1' : 'p2';
+    el.innerHTML = `<span class="highlight ${cls}">Player ${currentPlayer}</span>'s turn`;
+  }
+
+  function buildPreview() {
+    const preview = document.getElementById('preview');
+    preview.innerHTML = '';
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'preview-cell';
+      cell.id = `preview-${c}`;
+      preview.appendChild(cell);
+    }
+  }
+
+  function showPreview(col) {
+    if (gameOver || dropping) return;
+    for (let c = 0; c < COLS; c++) {
+      const pc = document.getElementById(`preview-${c}`);
+      pc.className = 'preview-cell';
+      if (c === col) {
+        pc.classList.add('active', currentPlayer === 1 ? 'p1' : 'p2');
+      }
+    }
+  }
+
+  function hidePreview() {
+    for (let c = 0; c < COLS; c++) {
+      const pc = document.getElementById(`preview-${c}`);
+      pc.className = 'preview-cell';
+    }
+  }
+
+  function drop(col) {
+    if (gameOver || dropping) return;
+    let landRow = -1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (!board[r][col]) { landRow = r; break; }
+    }
+    if (landRow === -1) return; // column full
+
+    dropping = true;
+    hidePreview();
+    board[landRow][col] = currentPlayer;
+
+    // Render immediately so the dropping cell exists in the DOM
+    render(null, { row: landRow, col, player: currentPlayer });
+
+    // After animation completes, check win/draw and switch player
+    setTimeout(() => {
+      dropping = false;
+      const win = checkWin(landRow, col);
+      if (win) {
+        gameOver = true;
+        render(win);
+        setStatus(currentPlayer);
+        return;
+      }
+      if (board[0].every((_, c) => board[0][c])) {
+        gameOver = true;
+        setStatus('draw');
+        return;
+      }
+      currentPlayer = currentPlayer === 1 ? 2 : 1;
+      setStatus();
+    }, 420);
+  }
+
+  function checkWin(row, col) {
+    const p = board[row][col];
+    const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    for (const [dr, dc] of dirs) {
+      let cells = [[row, col]];
+      for (const sign of [1, -1]) {
+        let r = row + dr*sign, c = col + dc*sign;
+        while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === p) {
+          cells.push([r, c]); r += dr*sign; c += dc*sign;
+        }
+      }
+      if (cells.length >= 4) return cells;
+    }
+    return null;
+  }
+
+  function render(winCells, dropping) {
+    const boardEl = document.getElementById('board');
+    boardEl.innerHTML = '';
+    const winSet = new Set((winCells || []).map(([r,c]) => `${r},${c}`));
+
+    // Build columns as interactive strips
+    for (let c = 0; c < COLS; c++) {
+      const strip = document.createElement('div');
+      strip.className = 'col-strip';
+      strip.addEventListener('mouseenter', () => showPreview(c));
+      strip.addEventListener('mouseleave', hidePreview);
+      strip.addEventListener('click', () => drop(c));
+
+      for (let r = 0; r < ROWS; r++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const val = board[r][c];
+        if (val === 1) cell.classList.add('p1');
+        if (val === 2) cell.classList.add('p2');
+        if (winSet.has(`${r},${c}`)) cell.classList.add('win');
+
+        // Add drop animation to the newly placed piece
+        if (dropping && r === dropping.row && c === dropping.col) {
+          // Calculate animation distance based on how far it falls
+          const fallRows = dropping.row + 1;
+          const cellSize = Math.min(60, Math.max(36, window.innerWidth * 0.08));
+          const dist = fallRows * (cellSize + 8);
+          cell.style.setProperty('--drop-dist', `${dist}px`);
+          cell.classList.add('dropping');
+        }
+
+        strip.appendChild(cell);
+      }
+      boardEl.appendChild(strip);
+    }
+  }
+
+  // Override grid layout for column-based structure
+  document.getElementById('board').style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+
+  resetGame();
+</script>
+</body>
+</html>

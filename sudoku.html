@@ -33,6 +33,9 @@
     --modal-bg:#fff;
     --font-size-scale:1;
     --board-scale:1;
+    /* Complementary color to accent — used for note candidate highlights */
+    --note-highlight: #2db8ae;
+    --note-highlight-text: #fff;
     transition: background 0.3s, color 0.3s;
   }
   /* Night mode */
@@ -51,14 +54,34 @@
     --cell-bg:#201c18;
     --board-border:#6b6258;
     --modal-bg:#242018;
+    --note-highlight: #00e0d4;
+    --note-highlight-text: #111;
   }
-  /* Color themes via accent only */
-  [data-theme="ocean"]   { --accent:#2e7fa6; --accent-soft:#c2e0ef; --user:#1a5c7a; --select:#b8ddf0; --peer:#e8f5fb; }
-  [data-theme="forest"]  { --accent:#3a7a4a; --accent-soft:#c0e0c8; --user:#2a5a38; --select:#aaddb8; --peer:#e0f2e5; }
-  [data-theme="plum"]    { --accent:#7a3a80; --accent-soft:#e0c0e8; --user:#5a2060; --select:#d8aadf; --peer:#f4e5f7; }
-  [data-night="1"][data-theme="ocean"]  { --accent:#4aa8d0; --accent-soft:#1a3d50; --user:#6ac0e0; --select:#1e3a4a; --peer:#1a2a32; }
-  [data-night="1"][data-theme="forest"] { --accent:#5ab870; --accent-soft:#1a3822; --user:#7ad090; --select:#1a3025; --peer:#182218; }
-  [data-night="1"][data-theme="plum"]   { --accent:#c060c8; --accent-soft:#3a1a40; --user:#d880e0; --select:#32183a; --peer:#201025; }
+  /* Color themes — accent + its complement for note highlights */
+  [data-theme="ocean"]  {
+    --accent:#2e7fa6; --accent-soft:#c2e0ef; --user:#1a5c7a; --select:#b8ddf0; --peer:#e8f5fb;
+    --note-highlight: #c85a1a; --note-highlight-text: #fff;
+  }
+  [data-theme="forest"] {
+    --accent:#3a7a4a; --accent-soft:#c0e0c8; --user:#2a5a38; --select:#aaddb8; --peer:#e0f2e5;
+    --note-highlight: #8b2a7a; --note-highlight-text: #fff;
+  }
+  [data-theme="plum"]   {
+    --accent:#7a3a80; --accent-soft:#e0c0e8; --user:#5a2060; --select:#d8aadf; --peer:#f4e5f7;
+    --note-highlight: #7aaa20; --note-highlight-text: #111;
+  }
+  [data-night="1"][data-theme="ocean"]  {
+    --accent:#4aa8d0; --accent-soft:#1a3d50; --user:#6ac0e0; --select:#1e3a4a; --peer:#1a2a32;
+    --note-highlight: #ff7830; --note-highlight-text: #111;
+  }
+  [data-night="1"][data-theme="forest"] {
+    --accent:#5ab870; --accent-soft:#1a3822; --user:#7ad090; --select:#1a3025; --peer:#182218;
+    --note-highlight: #d040b0; --note-highlight-text: #fff;
+  }
+  [data-night="1"][data-theme="plum"]   {
+    --accent:#c060c8; --accent-soft:#3a1a40; --user:#d880e0; --select:#32183a; --peer:#201025;
+    --note-highlight: #c8e020; --note-highlight-text: #111;
+  }
 
   *{box-sizing:border-box;}
   body{
@@ -98,6 +121,80 @@
     justify-content:center;
     font-family:'Helvetica Neue', Arial, sans-serif;
   }
+
+  /* ── MOBILE COMPACT TOOLBAR ── */
+  @media (max-width: 899px){
+    /* Hide the verbose header and old meta-row on mobile */
+    #header-block{ display:none; }
+    .meta-row{ display:none; }
+    .controls{ display:none; }
+
+    /* Compact top bar replaces all of the above */
+    #mobile-bar{
+      width:min(98vw, 500px);
+      margin-bottom:6px;
+    }
+    /* Row 1: difficulty tabs */
+    #diff-row{
+      display:flex;
+      gap:0;
+      margin-bottom:4px;
+      border:1px solid var(--line-thick);
+      border-radius:6px;
+      overflow:hidden;
+    }
+    .diff-tab{
+      flex:1;
+      background:var(--paper);
+      color:var(--ink);
+      border:none;
+      border-right:1px solid var(--line-thick);
+      padding:7px 4px;
+      font-family:'Helvetica Neue',Arial,sans-serif;
+      font-size:0.72rem;
+      font-weight:700;
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition:background 0.15s,color 0.15s;
+    }
+    .diff-tab:last-child{ border-right:none; }
+    .diff-tab.active{ background:var(--accent); color:#fff; }
+
+    /* Row 2: action toolbar */
+    #action-row{
+      display:flex;
+      align-items:center;
+      gap:4px;
+    }
+    /* action icon buttons */
+    .act-btn{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:2px;
+      background:var(--paper);
+      border:1px solid var(--line-thin);
+      border-radius:6px;
+      padding:6px 2px;
+      cursor:pointer;
+      font-family:'Helvetica Neue',Arial,sans-serif;
+      color:var(--ink);
+      transition:background 0.15s,color 0.15s;
+    }
+    .act-btn:hover{ background:var(--ink); color:var(--paper); }
+    .act-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+    .act-btn .act-icon{ font-size:1.1rem; line-height:1; }
+    .act-btn .act-label{
+      font-size:0.55rem;
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+      font-weight:700;
+      opacity:0.8;
+    }
+  }
   button{
     font-family:'Helvetica Neue', Arial, sans-serif;
     font-size:calc(0.78rem * var(--font-size-scale));
@@ -114,13 +211,87 @@
   button:hover{ background:var(--ink); color:var(--paper); }
   button.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
 
+  /* ── LAYOUT COLUMNS ── */
+  #board-col{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  #side-col{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width:100%;
+  }
+  #header-block{ text-align:center; }
+  #mobile-bar{ display:none; } /* hidden on desktop */
+  /* Mobile: single column, mobile-bar on top, board below */
+  @media (max-width: 899px){
+    #mobile-bar{
+      display:block;
+      order:1;
+    }
+    #board-col{ order:2; width:100%; }
+    #side-col{ display:none; } /* desktop controls hidden on mobile */
+  }
+
   /* ── BOARD ── */
+  /* ── RESPONSIVE BOARD SIZE ──
+     --board-size: the natural size before user scale.
+     On phone:  min(98vw, 500px)  ~390px on an iPhone
+     On tablet: min(90vw, 90vh)   fills the screen
+     On Tesla/desktop: min(88vh, 820px)  tall and prominent
+  */
+  :root{
+    --board-size: min(98vw, 500px);
+  }
+  @media (max-width: 899px){
+    /* On phone use more height now that controls are compact */
+    :root{ --board-size: min(98vw, min(62vh, 520px)); }
+  }
+  @media (min-width: 600px){
+    :root{ --board-size: min(88vw, min(88vh, 640px)); }
+  }
+  @media (min-width: 900px){
+    :root{ --board-size: min(80vh, 760px); }
+    body{
+      flex-direction:row;
+      align-items:flex-start;
+      justify-content:center;
+      gap:32px;
+      padding:32px;
+    }
+    #board-col{
+      flex-shrink:0;
+    }
+    #side-col{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      /* Wide enough for numpad (board/9 * 9 buttons + gaps) */
+      width:min(400px, 32vw);
+      min-width:300px;
+      flex-shrink:0;
+      padding-top:4px;
+    }
+    #header-block{ order:-1; }
+    #numpad{ margin-top:12px; }
+    #notepad{ margin-top:6px; }
+    .toggle-row{ margin-top:8px; }
+    #status{ text-align:left; }
+    .controls{ justify-content:flex-start; }
+  }
+  @media (min-width: 1200px){
+    :root{ --board-size: min(82vh, 860px); }
+    #side-col{ width:min(440px, 28vw); }
+  }
+
   #board{
     display:grid;
     grid-template-columns:repeat(9, 1fr);
     grid-template-rows:repeat(9, 1fr);
-    width:min(98vw, calc(500px * var(--board-scale)));
-    height:min(98vw, calc(500px * var(--board-scale)));
+    width:calc(var(--board-size) * var(--board-scale));
+    height:calc(var(--board-size) * var(--board-scale));
     border:3px solid var(--board-border);
     background:var(--board-border);
   }
@@ -128,7 +299,8 @@
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:calc(clamp(18px, 5vw, 30px) * var(--board-scale));
+    /* Cell is board-size / 9. Font ≈ 50% of cell = board-size/18 */
+    font-size:calc(var(--board-size) * var(--board-scale) / 18);
     border:1px solid var(--line-thin);
     cursor:pointer;
     user-select:none;
@@ -185,7 +357,7 @@
     grid-template-columns:repeat(9, 1fr);
     gap:4px;
     margin-top:18px;
-    width:min(98vw, calc(500px * var(--board-scale)));
+    width:calc(var(--board-size) * var(--board-scale));
   }
   .num-btn{
     display:flex;
@@ -198,7 +370,8 @@
     border:1px solid var(--line-thick);
     background:var(--cell-bg);
     color:var(--ink);
-    font-size:calc(clamp(0.95rem, 3.4vw, 1.3rem) * var(--board-scale));
+    /* Numpad button ≈ board/9 wide. Font ≈ 40% of button */
+    font-size:calc(var(--board-size) * var(--board-scale) / 22);
     font-weight:800;
     border-radius:4px;
     cursor:pointer;
@@ -244,7 +417,7 @@
     grid-template-columns:repeat(9, 1fr);
     gap:4px;
     margin-top:8px;
-    width:min(98vw, calc(500px * var(--board-scale)));
+    width:calc(var(--board-size) * var(--board-scale));
   }
   .note-btn{
     width:100%;
@@ -252,7 +425,7 @@
     border:1px solid var(--line-thin);
     background:var(--paper);
     color:#8a7f6c;
-    font-size:calc(clamp(0.75rem, 2.6vw, 1rem) * var(--board-scale));
+    font-size:calc(var(--board-size) * var(--board-scale) / 28);
     font-weight:700;
     border-radius:4px;
     cursor:pointer;
@@ -270,12 +443,11 @@
     grid-template-rows:repeat(3,1fr);
     width:100%;
     height:100%;
-    /* Board ≈ 98vw on phone, cell ≈ 10.9vw, slot ≈ 3.6vw.
-       Target digit ~2.8vw so it fills ~77% of slot width — big and readable. */
-    font-size:min(calc(2.8vw * var(--board-scale)), calc(13px * var(--board-scale)));
+    /* Slot = cell/3 = board/27. Target ~90% of slot so digits are large and clear. */
+    font-size:calc(var(--board-size) * var(--board-scale) / 29);
     line-height:1;
     font-family:'Helvetica Neue', Arial, sans-serif;
-    font-weight:700;
+    font-weight:800;
   }
   .pencil span{
     display:flex;
@@ -285,27 +457,46 @@
     /* Always occupy their grid position - use visibility not display */
     color: transparent; /* all hidden by default, JS adds classes */
   }
-  /* Active candidate */
+  /* Active candidate — visible */
   .pencil span.active{
-    color: #7a6a58;
+    color: var(--accent);
+    opacity: 0.85;
+    font-weight: 900;
   }
-  /* Selected-number highlight */
+  /* Selected-number highlight — complementary color for max contrast */
   .pencil span.note-match{
-    background: var(--accent);
-    color: #fff;
-    border-radius: 50%;
+    background: var(--note-highlight);
+    color: var(--note-highlight-text);
+    border-radius: 3px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
   }
   /* Hint: key candidate to place */
   .pencil span.hint-candidate{
-    background: var(--accent);
-    color: #fff;
-    border-radius: 50%;
+    background: var(--note-highlight);
+    color: var(--note-highlight-text);
+    border-radius: 3px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
   }
   /* Hint: should be eliminated */
   .pencil span.hint-eliminate{
     background: var(--error);
     color: #fff;
-    border-radius: 50%;
+    border-radius: 3px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-decoration: line-through;
   }
 
@@ -326,7 +517,7 @@
     display:flex;
     justify-content:space-between;
     align-items:center;
-    width:min(98vw, calc(500px * var(--board-scale)));
+    width:calc(var(--board-size) * var(--board-scale));
     font-family:'Helvetica Neue', Arial, sans-serif;
     font-size:calc(0.78rem * var(--font-size-scale));
     letter-spacing:0.05em;
@@ -462,7 +653,7 @@
     font-size:calc(0.82rem * var(--font-size-scale));
     color:var(--ink);
     text-align:left;
-    max-width:min(98vw, calc(500px * var(--board-scale)));
+    max-width:calc(var(--board-size) * var(--board-scale));
     line-height:1.6;
     background:var(--cell-bg);
     border:1px solid var(--line-thin);
@@ -481,6 +672,53 @@
     padding:6px 12px;
   }
   .hint-text .hint-body{ padding:10px 12px; }
+  .hint-text .hint-apply{
+    padding:0 12px 12px;
+  }
+  .hint-text .hint-apply button{
+    font-family:'Helvetica Neue', Arial, sans-serif;
+    font-size:calc(0.78rem * var(--font-size-scale));
+    font-weight:700;
+    letter-spacing:0.04em;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:4px;
+    padding:8px 16px;
+    cursor:pointer;
+    transition: opacity 0.15s;
+    text-transform:none;
+    width:100%;
+  }
+  .hint-text .hint-apply button:hover{ opacity:0.85; background:var(--accent); color:#fff; }
+
+  /* Mobile status area (below notepad on phones) */
+  @media (max-width: 899px){
+    #mobile-status-area{
+      width:min(98vw, calc(500px * var(--board-scale)));
+      margin-top:8px;
+    }
+    #m-status{
+      font-family:'Helvetica Neue',Arial,sans-serif;
+      font-size:0.85rem;
+      text-align:center;
+      min-height:1.2em;
+      color:var(--ink);
+      opacity:0.7;
+    }
+    #m-status.win{ color:var(--accent); font-weight:700; opacity:1; }
+    #mobile-status-area .hint-text{ max-width:100%; }
+  }
+  @media (min-width: 900px){
+    #mobile-status-area{ display:none; }
+  }
+
+  /* Wide screen: numpad/notepad are in board-col, they match board width naturally */
+  @media (min-width: 900px){
+    .meta-row, .toggle-row{ width:100% !important; }
+    .hint-text{ max-width:100% !important; }
+    #board-col .toggle-row{ width:calc(var(--board-size) * var(--board-scale)) !important; }
+  }
 
   /* ── SETTINGS PANEL ── */
   #settings-overlay{
@@ -586,6 +824,47 @@
   .row-block-bottom{ border-bottom:2px solid var(--board-border); }
 
   /* Win banner */
+  /* ── AUTO-COMPLETE POPUP ── */
+  #autocomplete-popup{
+    display:none;
+    position:fixed;
+    bottom:calc(110px + env(safe-area-inset-bottom));
+    left:50%;
+    transform:translateX(-50%);
+    z-index:400;
+    background:var(--accent);
+    color:#fff;
+    border-radius:14px;
+    padding:14px 24px;
+    font-family:'Helvetica Neue',Arial,sans-serif;
+    text-align:center;
+    box-shadow:0 8px 32px rgba(0,0,0,0.35);
+    cursor:pointer;
+    white-space:nowrap;
+    min-width:230px;
+  }
+  #autocomplete-popup.show{
+    display:block;
+    animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+  #autocomplete-popup .pop-label{
+    font-size:0.68rem;
+    font-weight:700;
+    opacity:0.85;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    margin-bottom:5px;
+  }
+  #autocomplete-popup .pop-btn{
+    font-size:1.1rem;
+    font-weight:800;
+    letter-spacing:0.02em;
+  }
+  @keyframes popIn{
+    from{ transform:translateX(-50%) scale(0.7) translateY(10px); opacity:0; }
+    to  { transform:translateX(-50%) scale(1)   translateY(0);    opacity:1; }
+  }
+
   /* ── WIN EFFECTS ── */
 
   /* Effect 1: board shake then numbers fall */
@@ -631,11 +910,47 @@
 </head>
 <body>
 
-<h1>Sudoku</h1>
-<div class="subtitle">A quiet game of nine</div>
+<!-- two-col wrapper: on desktop board-col floats left, side-col floats right -->
+<!-- ── MOBILE COMPACT BAR (phone only) ── -->
+<div id="mobile-bar">
+  <div id="diff-row">
+    <button class="diff-tab diff-btn" id="m-diffEasy">Easy</button>
+    <button class="diff-tab diff-btn active" id="m-diffMedium">Medium</button>
+    <button class="diff-tab diff-btn" id="m-diffHard">Hard</button>
+    <button class="diff-tab diff-btn" id="m-diffExpert">Expert</button>
+  </div>
+  <div id="action-row">
+    <button class="act-btn" id="m-newGame"><span class="act-icon">↺</span><span class="act-label">New</span></button>
+    <button class="act-btn" id="m-undoBtn"><span class="act-icon">↩</span><span class="act-label">Undo</span></button>
+    <button class="act-btn" id="m-autoCandidates"><span class="act-icon">✏️</span><span class="act-label">Notes</span></button>
+    <button class="act-btn" id="m-hintBtn"><span class="act-icon">💡</span><span class="act-label">Hint</span></button>
+    <button class="act-btn" id="m-learnBtn"><span class="act-icon">📖</span><span class="act-label">Learn</span></button>
+    <button class="act-btn" id="m-settingsBtn"><span class="act-icon">⚙️</span><span class="act-label">Settings</span></button>
+  </div>
+</div>
+
+<div id="board-col">
+  <div id="board"></div>
+  <div id="numpad"></div>
+  <div id="notepad"></div>
+  <div id="mobile-status-area">
+    <div id="m-status"></div>
+    <div class="hint-text" id="m-hintText"></div>
+  </div>
+  <div class="toggle-row">
+    <span>Top row enters numbers. Bottom row toggles note candidates for the selected cell.</span>
+  </div>
+</div>
+
+<div id="side-col">
+
+<div id="header-block">
+  <h1>Sudoku</h1>
+  <div class="subtitle">A quiet game of nine</div>
+</div>
 
 <div class="meta-row">
-  <span>Mistakes: <span id="mistakeCount">0</span></span>
+  <span></span>
   <span style="display:flex;gap:4px;align-items:center;">
     <button id="learnBtn" title="Learn strategies">📖</button>
     <button id="settingsBtn" title="Settings">⚙️</button>
@@ -648,23 +963,15 @@
   <button id="diffHard" class="diff-btn">Hard</button>
   <button id="diffExpert" class="diff-btn">Expert</button>
   <button id="newGame">New game</button>
-  <button id="eraseBtn">Erase</button>
+  <button id="undoBtn">Undo</button>
   <button id="autoCandidates">Fill candidates</button>
   <button id="hintBtn">Strategy hint</button>
-  <button id="solveBtn">Reveal solution</button>
-</div>
-
-<div id="board"></div>
-
-<div id="numpad"></div>
-<div id="notepad"></div>
-
-<div class="toggle-row">
-  <span>Top row enters numbers. Bottom row toggles small note candidates for the selected cell.</span>
 </div>
 
 <div id="status"></div>
 <div class="hint-text" id="hintText"></div>
+
+</div><!-- end side-col -->
 
 <!-- Learn page -->
 <div id="learn-page">
@@ -677,14 +984,14 @@
     <h3>Naked Single</h3>
     <span class="level-badge">Beginner</span>
     <p>Only one number can go in a cell — all others are ruled out by the row, column, and box.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=b123EURtu3I" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Singles — Sudoku Solving Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
+    <a class="video-card" href="https://youtu.be/b123EURtu3I" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Singles — Sudoku Solving Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Hidden Single</h3>
     <span class="level-badge">Beginner</span>
     <p>A number can only go in one cell within a row, column, or box, even though that cell has other candidates too.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=_pFcBxhUflg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Hidden Singles Explained</div><div class="v-channel">Mark Goodliffe</div></div></a>
+    <a class="video-card" href="https://youtu.be/_pFcBxhUflg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Hidden Singles Explained</div><div class="v-channel">Mark Goodliffe</div></div></a>
   </div>
 
   <div class="learn-divider"></div>
@@ -693,22 +1000,22 @@
     <h3>Naked Pair / Triple</h3>
     <span class="level-badge">Intermediate</span>
     <p>Two (or three) cells in a unit share exactly the same two (or three) candidates — those numbers are locked in and removed from other cells in the unit.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=6McG4KH3n2A" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Pairs Explained Clearly</div><div class="v-channel">HowcastTech</div></div></a>
-    <a class="video-card" href="https://www.youtube.com/watch?v=E_MNBwBjBxM" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Triples Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
+    <a class="video-card" href="https://youtu.be/6McG4KH3n2A" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Pairs Explained Clearly</div><div class="v-channel">HowcastTech</div></div></a>
+    <a class="video-card" href="https://youtu.be/E_MNBwBjBxM" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Naked Triples Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Hidden Pair / Triple</h3>
     <span class="level-badge">Intermediate</span>
     <p>Two (or three) candidates appear only within the same two (or three) cells of a unit — other candidates in those cells can be eliminated.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=J8fdKk_TqDI" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Hidden Pairs and Triples</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/J8fdKk_TqDI" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Hidden Pairs and Triples</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Pointing Pairs</h3>
     <span class="level-badge">Intermediate</span>
     <p>When all candidates for a number in a box are confined to one row or column, that number can be eliminated from the rest of that row or column outside the box.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=WsTIxYRiNyE" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Pointing Pairs and Triples</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/WsTIxYRiNyE" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Pointing Pairs and Triples</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-divider"></div>
@@ -717,23 +1024,23 @@
     <h3>X-Wing</h3>
     <span class="level-badge">Advanced</span>
     <p>A candidate in exactly two cells in each of two rows, aligned in the same two columns — eliminate that candidate from those columns everywhere else.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=LNdT84pHBUE" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">X-Wing Technique — Clear Explanation</div><div class="v-channel">dxSudoku</div></div></a>
-    <a class="video-card" href="https://www.youtube.com/watch?v=PMWSnG0XJMU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">X-Wing Sudoku Strategy</div><div class="v-channel">Cracking The Cryptic</div></div></a>
+    <a class="video-card" href="https://youtu.be/LNdT84pHBUE" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">X-Wing Technique — Clear Explanation</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/PMWSnG0XJMU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">X-Wing Sudoku Strategy</div><div class="v-channel">Cracking The Cryptic</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Swordfish</h3>
     <span class="level-badge">Advanced</span>
     <p>Like X-Wing extended to three rows and three columns. A number confined to those intersections can be eliminated from the three columns elsewhere.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=9M2PEzW-Okg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Swordfish Technique Explained</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/9M2PEzW-Okg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Swordfish Technique Explained</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Skyscraper / 2-String Kite</h3>
     <span class="level-badge">Advanced</span>
     <p>A number with exactly two candidates in each of two rows sharing a column forms a chain — cells that see both chain ends can have that candidate eliminated.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=QflkjuE4Eds" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Skyscraper Technique</div><div class="v-channel">dxSudoku</div></div></a>
-    <a class="video-card" href="https://www.youtube.com/watch?v=pnJ2bx-LMQU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">2-String Kite Explained</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/QflkjuE4Eds" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Skyscraper Technique</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/pnJ2bx-LMQU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">2-String Kite Explained</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-divider"></div>
@@ -742,30 +1049,30 @@
     <h3>XY-Wing</h3>
     <span class="level-badge">Expert</span>
     <p>A pivot cell (XY) sees two wings: one with XZ and one with YZ. Whichever value the pivot takes, one wing is forced to Z — so any cell seeing both wings cannot be Z.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=wF3JxNEsNOg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XY-Wing — Best Explanation</div><div class="v-channel">dxSudoku</div></div></a>
-    <a class="video-card" href="https://www.youtube.com/watch?v=ySJg19bX-kM" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XY-Wing Sudoku Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
+    <a class="video-card" href="https://youtu.be/wF3JxNEsNOg" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XY-Wing — Best Explanation</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/ySJg19bX-kM" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XY-Wing Sudoku Technique</div><div class="v-channel">Cracking The Cryptic</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>XYZ-Wing</h3>
     <span class="level-badge">Expert</span>
     <p>Like XY-Wing but the pivot has three candidates (XYZ). Any cell seeing the pivot and both wings cannot be Z.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=VkNV7eSAoRk" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XYZ-Wing Technique</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/VkNV7eSAoRk" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">XYZ-Wing Technique</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>Unique Rectangle Type 1</h3>
     <span class="level-badge">Expert</span>
     <p>Four cells forming a rectangle across two boxes share the same two candidates — this would create a deadly pattern (two solutions), so extra candidates in the "floor" cells must be the answer.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=3TWKZR8EXMU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Unique Rectangles Types 1–4</div><div class="v-channel">dxSudoku</div></div></a>
-    <a class="video-card" href="https://www.youtube.com/watch?v=T7N2OxXgFSI" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Unique Rectangle Explained</div><div class="v-channel">Cracking The Cryptic</div></div></a>
+    <a class="video-card" href="https://youtu.be/3TWKZR8EXMU" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Unique Rectangles Types 1–4</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/T7N2OxXgFSI" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">Unique Rectangle Explained</div><div class="v-channel">Cracking The Cryptic</div></div></a>
   </div>
 
   <div class="learn-section">
     <h3>BUG — Bivalue Universal Grave</h3>
     <span class="level-badge">Expert</span>
     <p>If all remaining empty cells would have exactly two candidates except one cell which has three, the number appearing three times in that cell must be placed there — otherwise the puzzle would have multiple solutions.</p>
-    <a class="video-card" href="https://www.youtube.com/watch?v=PMNiJ_p0bFY" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">BUG — Bivalue Universal Grave</div><div class="v-channel">dxSudoku</div></div></a>
+    <a class="video-card" href="https://youtu.be/PMNiJ_p0bFY" target="_blank"><div class="video-thumb">▶</div><div class="video-info"><div class="v-title">BUG — Bivalue Universal Grave</div><div class="v-channel">dxSudoku</div></div></a>
   </div>
 
   <div class="learn-divider"></div>
@@ -794,8 +1101,8 @@
     <div class="setting-row">
       <span class="setting-label">Color</span>
       <div class="color-swatches">
-        <div class="swatch active" data-theme="classic" title="Classic"></div>
-        <div class="swatch" data-theme="ocean" title="Ocean"></div>
+        <div class="swatch" data-theme="classic" title="Classic"></div>
+        <div class="swatch active" data-theme="ocean" title="Ocean"></div>
         <div class="swatch" data-theme="forest" title="Forest"></div>
         <div class="swatch" data-theme="plum" title="Plum"></div>
       </div>
@@ -806,16 +1113,44 @@
       <input type="range" id="fontSlider" min="80" max="130" value="100" step="5">
       <span class="range-val" id="fontVal">100%</span>
     </div>
+
+    <div class="setting-row">
+      <span class="setting-label">Auto-fill candidates</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="autoFillToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 </div>
 
+<!-- Auto-complete popup -->
+<div id="autocomplete-popup">
+  <div class="pop-label">Only singles remain</div>
+  <div class="pop-btn">⚡ Auto-complete</div>
+</div>
 
 <script>
 (function(){
   const boardEl = document.getElementById('board');
   const numpadEl = document.getElementById('numpad');
-  const statusEl = document.getElementById('status');
-  const hintTextEl = document.getElementById('hintText');
+  // Use mobile elements on small screens, desktop elements on large
+  const isMobile = () => window.innerWidth < 900;
+  const statusEl = {
+    get textContent(){ return document.getElementById(isMobile()?'m-status':'status').textContent; },
+    set textContent(v){ document.getElementById('status').textContent=v; document.getElementById('m-status').textContent=v; },
+    get className(){ return document.getElementById(isMobile()?'m-status':'status').className; },
+    set className(v){ document.getElementById('status').className=v; document.getElementById('m-status').className=v; },
+  };
+  const hintTextEl = {
+    get innerHTML(){ return document.getElementById(isMobile()?'m-hintText':'hintText').innerHTML; },
+    set innerHTML(v){
+      document.getElementById('hintText').innerHTML=v;
+      document.getElementById('m-hintText').innerHTML=v;
+    },
+    get textContent(){ return document.getElementById('hintText').textContent; },
+    set textContent(v){ document.getElementById('hintText').textContent=v; document.getElementById('m-hintText').textContent=v; },
+  };
 
   let solution = [];
   let puzzle = [];   // 0 = empty
@@ -827,6 +1162,7 @@
   let notes = []; // 9x9 array of Sets, candidate numbers per cell
   let wrongAttempt = null; // {r,c,n} transient incorrect guess, not committed
   let activeHint = null; // current strategy hint, for board highlight rendering
+  let undoStack = []; // each entry: {userGrid, notes} snapshots
   let mistakes = 0;
   let difficulty = 'medium';
 
@@ -1538,13 +1874,18 @@
     const candBtn = document.getElementById('autoCandidates');
     candBtn.classList.remove('active');
     candBtn.textContent = 'Fill candidates';
+    const mCandBtn = document.getElementById('m-autoCandidates');
+    if(mCandBtn) mCandBtn.classList.remove('active');
     updateMistakesDisplay();
     statusEl.textContent='';
     statusEl.className='';
     hintTextEl.textContent='';
+    undoStack = [];
+    hideAutoCompletePopup();
     renderBoard();
     renderNumpad();
     renderNotepad();
+    if(document.getElementById('autoFillToggle')?.checked) autoFillCandidates();
   }
 
   function render(){
@@ -1594,7 +1935,8 @@
           cell.classList.add('wrong-guess');
         } else if(val!==0){
           cell.textContent = val;
-          if(selectedNumber!==null && val===selectedNumber){
+          // Only show number-match highlights when no hint is active
+          if(!activeHint && selectedNumber!==null && val===selectedNumber){
             cell.classList.add('number-match');
           }
         } else if(!given[r][c] && (notes[r][c].size>0 || elimSet || keyCandidate)){
@@ -1612,13 +1954,13 @@
             } else if(isElim){
               span.classList.add('hint-eliminate');
             } else if(inNotes){
-              if(selectedNumber!==null && n===selectedNumber){
+              // Only show note-match highlights when no hint is active
+              if(!activeHint && selectedNumber!==null && n===selectedNumber){
                 span.classList.add('note-match');
               } else {
                 span.classList.add('active');
               }
             }
-            // else: stays transparent (position held but invisible)
             pencil.appendChild(span);
           }
           cell.appendChild(pencil);
@@ -1720,6 +2062,11 @@
   }
 
   function selectCell(r,c){
+    // If a hint is active and the player taps a different cell, dismiss the hint
+    if(activeHint){
+      const isHintTarget = activeHint.target && activeHint.target.r===r && activeHint.target.c===c;
+      if(!isHintTarget) clearHint();
+    }
     selected = {r,c};
     const val = userGrid[r][c];
     selectedNumber = (val!==0) ? val : null;
@@ -1728,7 +2075,7 @@
   }
 
   function updateMistakesDisplay(){
-    document.getElementById('mistakeCount').textContent = mistakes;
+    // mistake counter removed from UI — kept as internal state only
   }
 
   function clearHint(){
@@ -1736,14 +2083,39 @@
     hintTextEl.innerHTML='';
   }
 
+  function pushUndo(){
+    undoStack.push({
+      userGrid: userGrid.map(r=>r.slice()),
+      notes: notes.map(r=>r.map(s=>new Set(s))),
+      selectedNumber,
+      mistakes
+    });
+    if(undoStack.length>50) undoStack.shift(); // limit stack size
+  }
+
+  function undoMove(){
+    if(undoStack.length===0) return;
+    const prev = undoStack.pop();
+    userGrid = prev.userGrid;
+    notes = prev.notes;
+    selectedNumber = prev.selectedNumber;
+    mistakes = prev.mistakes;
+    updateMistakesDisplay();
+    clearHint();
+    render();
+    if(checkAutoComplete()) showAutoCompletePopup();
+    else hideAutoCompletePopup();
+  }
+
   function placeNumber(n){
     if(!selected) return;
     const {r,c} = selected;
     if(given[r][c]) return;
-    if(toggledOff.has(n)) return; // toggled off numbers can't be placed
+    if(toggledOff.has(n)) return;
 
     // tapping the same number that's already placed clears the cell
     if(userGrid[r][c]===n){
+      pushUndo();
       userGrid[r][c]=0;
       selectedNumber = null;
       clearHint();
@@ -1752,7 +2124,6 @@
     }
 
     if(n!==solution[r][c]){
-      // wrong guess: show briefly in red, don't commit
       wrongAttempt = {r,c,n};
       mistakes++;
       updateMistakesDisplay();
@@ -1767,15 +2138,17 @@
       return;
     }
 
+    pushUndo();
     userGrid[r][c] = n;
-    notes[r][c].clear(); // clear notes once a value is placed
+    notes[r][c].clear();
     clearNoteFromPeers(r,c,n);
     selectedNumber = n;
     wrongAttempt = null;
     clearHint();
     render();
-    // flash completed units/numbers (must run after render so boardEl is fresh)
     checkAndFlashCompletions(r,c,n);
+    if(checkAutoComplete()) showAutoCompletePopup();
+    else hideAutoCompletePopup();
     checkWin();
   }
 
@@ -1783,7 +2156,8 @@
     if(!selected) return;
     const {r,c} = selected;
     if(given[r][c]) return;
-    if(userGrid[r][c]!==0) return; // can't add notes to a filled cell
+    if(userGrid[r][c]!==0) return;
+    pushUndo();
     const set = notes[r][c];
     if(set.has(n)) set.delete(n);
     else set.add(n);
@@ -1803,17 +2177,14 @@
   }
 
   function autoFillCandidates(){
-    // determine current state: are candidates currently shown anywhere?
     let anyNotes = false;
     for(let r=0;r<9;r++) for(let c=0;c<9;c++){
       if(userGrid[r][c]===0 && notes[r][c].size>0){ anyNotes = true; break; }
     }
-
+    pushUndo();
     if(anyNotes){
-      // turn off: clear all notes
       for(let r=0;r<9;r++) for(let c=0;c<9;c++) notes[r][c].clear();
     } else {
-      // turn on: fill every empty cell with its valid candidates
       for(let r=0;r<9;r++) for(let c=0;c<9;c++){
         if(userGrid[r][c]!==0) { notes[r][c].clear(); continue; }
         const set = new Set();
@@ -1823,11 +2194,12 @@
         notes[r][c]=set;
       }
     }
-
     const btn = document.getElementById('autoCandidates');
     btn.classList.toggle('active', !anyNotes);
     btn.textContent = anyNotes ? 'Fill candidates' : 'Clear candidates';
-
+    // Sync mobile button
+    const mBtn = document.getElementById('m-autoCandidates');
+    if(mBtn) mBtn.classList.toggle('active', !anyNotes);
     clearHint();
     renderBoard();
     renderNotepad();
@@ -1854,6 +2226,8 @@
     if(!selected) return;
     const {r,c}=selected;
     if(given[r][c]) return;
+    if(userGrid[r][c]===0 && notes[r][c].size===0) return; // nothing to erase
+    pushUndo();
     userGrid[r][c]=0;
     notes[r][c].clear();
     selectedNumber = null;
@@ -2035,7 +2409,99 @@
     return true;
   }
 
-  // ---------- Strategy hint engine ----------
+  // ---------- Auto-complete detection ----------
+  const autocompletePopup = document.getElementById('autocomplete-popup');
+  let autocompleteVisible = false;
+
+  function checkAutoComplete(){
+    // Only offer auto-complete when EVERY remaining empty cell
+    // is a naked single RIGHT NOW — no cascade needed, no hidden singles.
+    // This fires at the very end when the board is genuinely trivial to finish,
+    // not when it *could* become trivial through a chain of deductions.
+    let hasEmpty = false;
+    for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+      if(userGrid[r][c]!==0) continue;
+      hasEmpty = true;
+      let count=0;
+      for(let n=1;n<=9;n++){
+        if(isValid(userGrid,r,c,n)) count++;
+        if(count>1) return false; // this cell still has multiple options
+      }
+      if(count===0) return false; // contradiction
+    }
+    return hasEmpty;
+  }
+
+  function showAutoCompletePopup(){
+    if(autocompleteVisible) return;
+    autocompleteVisible=true;
+    autocompletePopup.classList.add('show');
+  }
+
+  function hideAutoCompletePopup(){
+    autocompleteVisible=false;
+    autocompletePopup.classList.remove('show');
+  }
+
+  function doAutoComplete(){
+    hideAutoCompletePopup();
+    pushUndo();
+
+    function findNextSingle(){
+      // Naked single
+      for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+        if(userGrid[r][c]!==0) continue;
+        let count=0,val=0;
+        for(let n=1;n<=9;n++){
+          if(isValid(userGrid,r,c,n)){ count++; val=n; }
+          if(count>1) break;
+        }
+        if(count===1) return {r,c,n:val};
+      }
+      // Hidden single in row
+      for(let r=0;r<9;r++) for(let n=1;n<=9;n++){
+        const spots=[];
+        for(let c=0;c<9;c++) if(userGrid[r][c]===0 && isValid(userGrid,r,c,n)) spots.push([r,c]);
+        if(spots.length===1) return {r:spots[0][0],c:spots[0][1],n};
+      }
+      // Hidden single in col
+      for(let c=0;c<9;c++) for(let n=1;n<=9;n++){
+        const spots=[];
+        for(let r=0;r<9;r++) if(userGrid[r][c]===0 && isValid(userGrid,r,c,n)) spots.push([r,c]);
+        if(spots.length===1) return {r:spots[0][0],c:spots[0][1],n};
+      }
+      // Hidden single in box
+      for(let br=0;br<9;br+=3) for(let bc=0;bc<9;bc+=3) for(let n=1;n<=9;n++){
+        const spots=[];
+        for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+          const r=br+i,c=bc+j;
+          if(userGrid[r][c]===0 && isValid(userGrid,r,c,n)) spots.push([r,c]);
+        }
+        if(spots.length===1) return {r:spots[0][0],c:spots[0][1],n};
+      }
+      return null;
+    }
+
+    function fillNext(){
+      const move = findNextSingle();
+      if(!move) return; // nothing left to place safely
+      const {r,c,n} = move;
+      userGrid[r][c]=n;
+      notes[r][c].clear();
+      clearNoteFromPeers(r,c,n);
+      render();
+      checkAndFlashCompletions(r,c,n);
+      let anyEmpty=false;
+      for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(userGrid[r][c]===0){ anyEmpty=true; break; }
+      if(anyEmpty) setTimeout(fillNext, 80);
+      else checkWin();
+    }
+    fillNext();
+  }
+
+  autocompletePopup.addEventListener('click', doAutoComplete);
+
+
   // Returns 9x9 array of Sets: candidates for each empty cell based on current userGrid
   function computeCandidates(){
     const cands = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
@@ -2076,11 +2542,21 @@
       if(userGrid[r][c]!==0) continue;
       if(cands[r][c].size===1){
         const n=[...cands[r][c]][0];
+        // Find which numbers are already used in row, col, box for explanation
+        const usedInRow=new Set(), usedInCol=new Set(), usedInBox=new Set();
+        for(let i=0;i<9;i++){
+          if(userGrid[r][i]) usedInRow.add(userGrid[r][i]);
+          if(userGrid[i][c]) usedInCol.add(userGrid[i][c]);
+        }
+        const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
+        for(let i=0;i<3;i++) for(let j=0;j<3;j++) if(userGrid[br+i][bc+j]) usedInBox.add(userGrid[br+i][bc+j]);
+        const allUsed=new Set([...usedInRow,...usedInCol,...usedInBox]);
+        const blocked=[1,2,3,4,5,6,7,8,9].filter(v=>v!==n&&allUsed.has(v));
         return {
           technique:'Naked Single',
           target:{r,c,n},
           highlightCells:[{r,c,role:'target'}],
-          body:`Cell R${r+1}C${c+1} has only one possible candidate left: ${n}. Every other number is already used in its row, column, or box, so ${n} must go here.`
+          body:`R${r+1}C${c+1} can only be ${n}. The numbers ${blocked.join(', ')} are all already placed in the same row, column, or box — leaving ${n} as the only option.`
         };
       }
     }
@@ -2096,14 +2572,17 @@
           const spots = cells.filter(([r,c])=>cands[r][c].has(n));
           if(spots.length===1){
             const [r,c] = spots[0];
-            // skip if this is also a naked single (less interesting / already covered)
-            if(cands[r][c].size===1) continue;
             const highlightCells = cells.map(([rr,cc])=>({r:rr,c:cc,role:(rr===r&&cc===c)?'target':'unit'}));
+            // Explain why each other cell is ruled out
+            const ruledOut=cells.filter(([rr,cc])=>rr!==r||cc!==c).filter(([rr,cc])=>!cands[rr][cc].has(n));
+            const reason = ruledOut.length>0 ?
+              `The other ${ruledOut.length} empty cell${ruledOut.length>1?'s':''} in this ${name} already have ${n} eliminated by their row, column, or box.` :
+              `No other empty cell in this ${name} can hold ${n}.`;
             return {
               technique:'Hidden Single',
               target:{r,c,n},
               highlightCells,
-              body:`Look at this ${name}. The number ${n} can only fit in one cell — R${r+1}C${c+1} — because every other empty cell in this ${name} already has ${n} ruled out by its row, column, or box. So ${n} belongs in R${r+1}C${c+1}.`
+              body:`${n} can only go in one place in this ${name}: R${r+1}C${c+1}. ${reason} Place ${n} there.`
             };
           }
         }
@@ -2347,79 +2826,81 @@
   function findXWing(cands){
     // rows -> columns version
     for(let n=1;n<=9;n++){
-      const rowSpots = []; // for each row, the columns where n is a candidate (if exactly 2)
+      const rowSpots=[];
       for(let r=0;r<9;r++){
         const cols=[];
-        for(let c=0;c<9;c++){
-          if(userGrid[r][c]===0 && cands[r][c].has(n)) cols.push(c);
-        }
+        for(let c=0;c<9;c++) if(userGrid[r][c]===0 && cands[r][c].has(n)) cols.push(c);
         if(cols.length===2) rowSpots.push({r,cols});
       }
-      for(let i=0;i<rowSpots.length;i++){
-        for(let j=i+1;j<rowSpots.length;j++){
-          const A=rowSpots[i], B=rowSpots[j];
-          if(A.cols[0]===B.cols[0] && A.cols[1]===B.cols[1]){
-            const [c1,c2]=A.cols;
-            const elims=[];
-            for(let r=0;r<9;r++){
-              if(r===A.r || r===B.r) continue;
-              for(const c of [c1,c2]){
-                if(userGrid[r][c]===0 && cands[r][c].has(n)) elims.push({r,c,n});
-              }
-            }
-            if(elims.length===0) continue;
-            const highlightCells=[
-              {r:A.r,c:c1,role:'target'},{r:A.r,c:c2,role:'target'},
-              {r:B.r,c:c1,role:'target'},{r:B.r,c:c2,role:'target'},
-              ...elims.map(e=>({r:e.r,c:e.c,role:'related'}))
-            ];
-            return {
-              technique:'X-Wing',
-              target:null,
-              highlightCells,
-              eliminate:elims,
-              body:`The candidate ${n} forms a rectangle: in rows ${A.r+1} and ${B.r+1}, it only appears in columns ${c1+1} and ${c2+1}. Each of those rows must place ${n} in one of those two columns — so each column already has its ${n} accounted for between these two rows. That means ${n} can be eliminated from columns ${c1+1} and ${c2+1} in every other row (shown in red).`
-            };
+      for(let i=0;i<rowSpots.length;i++) for(let j=i+1;j<rowSpots.length;j++){
+        const A=rowSpots[i], B=rowSpots[j];
+        if(A.cols[0]===B.cols[0] && A.cols[1]===B.cols[1]){
+          const [c1,c2]=A.cols;
+          const elims=[];
+          for(let r=0;r<9;r++){
+            if(r===A.r||r===B.r) continue;
+            for(const c of [c1,c2]) if(userGrid[r][c]===0 && cands[r][c].has(n)) elims.push({r,c,n});
           }
+          if(elims.length===0) continue;
+          // Highlight: 4 corners as target, rest of the two locked columns as unit
+          const cornerSet=new Set([`${A.r},${c1}`,`${A.r},${c2}`,`${B.r},${c1}`,`${B.r},${c2}`]);
+          const highlightCells=[
+            {r:A.r,c:c1,role:'target'},{r:A.r,c:c2,role:'target'},
+            {r:B.r,c:c1,role:'target'},{r:B.r,c:c2,role:'target'},
+          ];
+          // Mark other cells in the two locked columns as 'unit' so the columns are visually clear
+          for(let r=0;r<9;r++){
+            if(cornerSet.has(`${r},${c1}`) || cornerSet.has(`${r},${c2}`)) continue;
+            if(userGrid[r][c1]===0) highlightCells.push({r,c:c1,role:'unit'});
+            if(userGrid[r][c2]===0) highlightCells.push({r,c:c2,role:'unit'});
+          }
+          highlightCells.push(...elims.map(e=>({r:e.r,c:e.c,role:'related'})));
+          return {
+            technique:'X-Wing',
+            target:null,
+            highlightCells,
+            eliminate:elims,
+            body:`X-Wing on ${n}: in rows ${A.r+1} and ${B.r+1}, the only places for ${n} are columns ${c1+1} and ${c2+1} (the four highlighted corners). Since ${n} must land in one of those two columns in each row, every other cell in columns ${c1+1} and ${c2+1} can't be ${n} — eliminate it from the red cells.`
+          };
         }
       }
     }
     // columns -> rows version
     for(let n=1;n<=9;n++){
-      const colSpots = [];
+      const colSpots=[];
       for(let c=0;c<9;c++){
         const rows=[];
-        for(let r=0;r<9;r++){
-          if(userGrid[r][c]===0 && cands[r][c].has(n)) rows.push(r);
-        }
+        for(let r=0;r<9;r++) if(userGrid[r][c]===0 && cands[r][c].has(n)) rows.push(r);
         if(rows.length===2) colSpots.push({c,rows});
       }
-      for(let i=0;i<colSpots.length;i++){
-        for(let j=i+1;j<colSpots.length;j++){
-          const A=colSpots[i], B=colSpots[j];
-          if(A.rows[0]===B.rows[0] && A.rows[1]===B.rows[1]){
-            const [r1,r2]=A.rows;
-            const elims=[];
-            for(let c=0;c<9;c++){
-              if(c===A.c || c===B.c) continue;
-              for(const r of [r1,r2]){
-                if(userGrid[r][c]===0 && cands[r][c].has(n)) elims.push({r,c,n});
-              }
-            }
-            if(elims.length===0) continue;
-            const highlightCells=[
-              {r:r1,c:A.c,role:'target'},{r:r2,c:A.c,role:'target'},
-              {r:r1,c:B.c,role:'target'},{r:r2,c:B.c,role:'target'},
-              ...elims.map(e=>({r:e.r,c:e.c,role:'related'}))
-            ];
-            return {
-              technique:'X-Wing',
-              target:null,
-              highlightCells,
-              eliminate:elims,
-              body:`The candidate ${n} forms a rectangle: in columns ${A.c+1} and ${B.c+1}, it only appears in rows ${r1+1} and ${r2+1}. Each of those columns must place ${n} in one of those two rows — so each row already has its ${n} accounted for between these two columns. That means ${n} can be eliminated from rows ${r1+1} and ${r2+1} in every other column (shown in red).`
-            };
+      for(let i=0;i<colSpots.length;i++) for(let j=i+1;j<colSpots.length;j++){
+        const A=colSpots[i], B=colSpots[j];
+        if(A.rows[0]===B.rows[0] && A.rows[1]===B.rows[1]){
+          const [r1,r2]=A.rows;
+          const elims=[];
+          for(let c=0;c<9;c++){
+            if(c===A.c||c===B.c) continue;
+            for(const r of [r1,r2]) if(userGrid[r][c]===0 && cands[r][c].has(n)) elims.push({r,c,n});
           }
+          if(elims.length===0) continue;
+          const cornerSet=new Set([`${r1},${A.c}`,`${r2},${A.c}`,`${r1},${B.c}`,`${r2},${B.c}`]);
+          const highlightCells=[
+            {r:r1,c:A.c,role:'target'},{r:r2,c:A.c,role:'target'},
+            {r:r1,c:B.c,role:'target'},{r:r2,c:B.c,role:'target'},
+          ];
+          for(let c=0;c<9;c++){
+            if(cornerSet.has(`${r1},${c}`) || cornerSet.has(`${r2},${c}`)) continue;
+            if(userGrid[r1][c]===0) highlightCells.push({r:r1,c,role:'unit'});
+            if(userGrid[r2][c]===0) highlightCells.push({r:r2,c,role:'unit'});
+          }
+          highlightCells.push(...elims.map(e=>({r:e.r,c:e.c,role:'related'})));
+          return {
+            technique:'X-Wing',
+            target:null,
+            highlightCells,
+            eliminate:elims,
+            body:`X-Wing on ${n}: in columns ${A.c+1} and ${B.c+1}, the only places for ${n} are rows ${r1+1} and ${r2+1} (the four highlighted corners). Since ${n} must land in one of those two rows in each column, every other cell in rows ${r1+1} and ${r2+1} can't be ${n} — eliminate it from the red cells.`
+          };
         }
       }
     }
@@ -2753,14 +3234,125 @@
     return null;
   }
 
+  // 0. Last Digit: a unit with only one empty cell — fill the missing number
+  function findLastDigit(cands){
+    for(const {type,name} of UNIT_TYPES){
+      for(let idx=0;idx<9;idx++){
+        const emptyCells = unitCells(type,idx).filter(([r,c])=>userGrid[r][c]===0);
+        if(emptyCells.length===1){
+          const [r,c] = emptyCells[0];
+          const n = [...cands[r][c]][0];
+          if(!n) continue;
+          // Find which numbers are in the unit to name them specifically
+          const filled = unitCells(type,idx)
+            .filter(([rr,cc])=>userGrid[rr][cc]!==0)
+            .map(([rr,cc])=>userGrid[rr][cc]).sort((a,b)=>a-b);
+          return {
+            technique:'Last Digit',
+            target:{r,c,n},
+            highlightCells:[
+              ...unitCells(type,idx).map(([rr,cc])=>({r:rr,c:cc,role:(rr===r&&cc===c)?'target':'unit'}))
+            ],
+            body:`This ${name} already has ${filled.join(', ')} — only ${n} is missing. R${r+1}C${c+1} is the only empty cell, so it must be ${n}.`
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  // Claiming Candidates (reverse pointing pair): if all candidates for a number
+  // within a row or column are confined to one box, eliminate that number from
+  // the rest of the box
+  function findClaimingCandidates(cands){
+    for(let n=1;n<=9;n++){
+      // rows
+      for(let r=0;r<9;r++){
+        const spots=[];
+        for(let c=0;c<9;c++) if(userGrid[r][c]===0&&cands[r][c].has(n)) spots.push([r,c]);
+        if(spots.length<2||spots.length>3) continue;
+        const boxes=new Set(spots.map(([,c])=>Math.floor(c/3)));
+        if(boxes.size!==1) continue;
+        const box=[...boxes][0];
+        const br=Math.floor(r/3)*3, bc=box*3;
+        const elims=[];
+        for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+          const rr=br+i,cc=bc+j;
+          if(rr===r||userGrid[rr][cc]!==0) continue;
+          if(cands[rr][cc].has(n)) elims.push({r:rr,c:cc,n});
+        }
+        if(elims.length===0) continue;
+        return {
+          technique:'Claiming Candidates',
+          target:null,
+          highlightCells:[
+            ...spots.map(([r,c])=>({r,c,role:'target'})),
+            ...elims.map(e=>({r:e.r,c:e.c,role:'related'}))
+          ],
+          eliminate:elims,
+          body:`In row ${r+1}, every remaining candidate for ${n} sits in the same box (at ${spots.map(([r,c])=>`R${r+1}C${c+1}`).join(' and ')}). So ${n} in this box must land in row ${r+1} — you can eliminate ${n} from the rest of the box (shown in red).`
+        };
+      }
+      // columns
+      for(let c=0;c<9;c++){
+        const spots=[];
+        for(let r=0;r<9;r++) if(userGrid[r][c]===0&&cands[r][c].has(n)) spots.push([r,c]);
+        if(spots.length<2||spots.length>3) continue;
+        const boxes=new Set(spots.map(([r,])=>Math.floor(r/3)));
+        if(boxes.size!==1) continue;
+        const box=[...boxes][0];
+        const br=box*3, bc=Math.floor(c/3)*3;
+        const elims=[];
+        for(let i=0;i<3;i++) for(let j=0;j<3;j++){
+          const rr=br+i,cc=bc+j;
+          if(cc===c||userGrid[rr][cc]!==0) continue;
+          if(cands[rr][cc].has(n)) elims.push({r:rr,c:cc,n});
+        }
+        if(elims.length===0) continue;
+        return {
+          technique:'Claiming Candidates',
+          target:null,
+          highlightCells:[
+            ...spots.map(([r,c])=>({r,c,role:'target'})),
+            ...elims.map(e=>({r:e.r,c:e.c,role:'related'}))
+          ],
+          eliminate:elims,
+          body:`In column ${c+1}, every remaining candidate for ${n} sits in the same box (at ${spots.map(([r,c])=>`R${r+1}C${c+1}`).join(' and ')}). So ${n} in this box must land in column ${c+1} — you can eliminate ${n} from the rest of the box (shown in red).`
+        };
+      }
+    }
+    return null;
+  }
+
   function giveHint(){
-    // First check: any committed cell already wrong vs solution? (shouldn't happen with the
-    // new guess-checking, but guard anyway for given/solved states)
-    const cands = computeCandidates();
+    // Build candidates respecting user's notes.
+    // If the user has filled in notes, we intersect with them so hints never
+    // suggest eliminating candidates the user already removed manually.
+    const logicalCands = computeCandidates();
+    const hasAnyNotes = (()=>{
+      for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(userGrid[r][c]===0 && notes[r][c].size>0) return true;
+      return false;
+    })();
+    const cands = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
+    for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+      if(userGrid[r][c]!==0) continue;
+      const logical = logicalCands[r][c];
+      const user = notes[r][c];
+      if(hasAnyNotes && user.size>0){
+        // User has notes for this cell — intersect to respect their manual removals
+        for(const n of user) if(logical.has(n)) cands[r][c].add(n);
+      } else {
+        // Either no notes system in use, or this specific cell has no notes —
+        // always use full logical candidates so hint finders can see every cell
+        for(const n of logical) cands[r][c].add(n);
+      }
+    }
 
     const finders = [
+      findLastDigit,
       findNakedSingle, findHiddenSingle,
-      findNakedPair, findHiddenPair, findPointingPair,
+      findNakedPair, findHiddenPair,
+      findPointingPair, findClaimingCandidates,
       findNakedTriple, findHiddenTriple,
       findXWing, findSwordfish,
       findSkyscraper, findXYWing, findUR1, findBUG
@@ -2769,6 +3361,15 @@
     for(const fn of finders){
       hint = fn(cands);
       if(hint) break;
+    }
+
+    // If no hint found with user-restricted candidates, retry with pure logical
+    // candidates — this catches cases where manually removed notes hide valid moves
+    if(!hint && hasAnyNotes){
+      for(const fn of finders){
+        hint = fn(logicalCands);
+        if(hint) break;
+      }
     }
 
     if(!hint){
@@ -2782,13 +3383,31 @@
         return;
       }
       activeHint = {highlightCells:[], eliminate:[]};
-      hintTextEl.innerHTML = `<div class="hint-title">No move found</div><div class="hint-body">This board needs a technique beyond what this hint system covers. Try the 📖 Learn page for advanced strategies like XYZ-Wing, Jellyfish, or Forcing Chains, or use "Reveal solution" if stuck.</div>`;
+      hintTextEl.innerHTML = `<div class="hint-title">No move found</div><div class="hint-body">This board needs a technique beyond what this hint system covers — likely Jellyfish, XYZ-Wing, or Forcing Chains. Try the 📖 Learn page for guidance.</div>`;
       renderBoard();
       return;
     }
 
     activeHint = hint;
-    hintTextEl.innerHTML = `<div class="hint-title">${hint.technique}</div><div class="hint-body">${hint.body}</div>`;
+
+    // Determine what "Apply" will do for the button label
+    let applyLabel = '';
+    if(hint.target && hint.target.n){
+      applyLabel = `Place ${hint.target.n} in R${hint.target.r+1}C${hint.target.c+1}`;
+    } else if(hint.eliminate && hint.eliminate.length > 0){
+      const uniqueNums = [...new Set(hint.eliminate.map(e=>e.n))];
+      applyLabel = `Remove candidate${uniqueNums.length>1?'s':''} ${uniqueNums.join(', ')}`;
+    }
+
+    hintTextEl.innerHTML = `
+      <div class="hint-title">${hint.technique}</div>
+      <div class="hint-body">${hint.body}</div>
+      ${applyLabel ? `<div class="hint-apply"><button id="applyHintBtn">▶ ${applyLabel}</button></div>` : ''}
+    `;
+
+    if(applyLabel){
+      document.querySelectorAll('#applyHintBtn').forEach(b=>b.addEventListener('click', applyHint));
+    }
 
     // select the primary target cell if there is one, for board focus
     if(hint.target){
@@ -2799,32 +3418,78 @@
     renderNotepad();
   }
 
-  function revealSolution(){
-    for(let r=0;r<9;r++) for(let c=0;c<9;c++){
-      userGrid[r][c]=solution[r][c];
+  function applyHint(){
+    if(!activeHint) return;
+    pushUndo();
+    const hint = activeHint;
+
+    if(hint.target && hint.target.n){
+      // Place the number
+      const {r,c,n} = hint.target;
+      userGrid[r][c] = n;
+      notes[r][c].clear();
+      clearNoteFromPeers(r,c,n);
+      selectedNumber = n;
     }
+
+    if(hint.eliminate && hint.eliminate.length > 0){
+      // Auto-fill candidates if none exist yet so eliminations are visible
+      let anyNotes = false;
+      for(let r=0;r<9;r++) for(let c=0;c<9;c++) if(userGrid[r][c]===0 && notes[r][c].size>0){ anyNotes=true; break; }
+      if(!anyNotes){
+        for(let r=0;r<9;r++) for(let c=0;c<9;c++){
+          if(userGrid[r][c]!==0){ notes[r][c].clear(); continue; }
+          const s=new Set(); for(let n=1;n<=9;n++) if(isValid(userGrid,r,c,n)) s.add(n);
+          notes[r][c]=s;
+        }
+      }
+      // Apply eliminations
+      for(const {r,c,n} of hint.eliminate){
+        notes[r][c].delete(n);
+      }
+    }
+
     clearHint();
-    statusEl.textContent='Solution revealed.';
-    statusEl.className='';
     render();
+    if(hint.target && hint.target.n){
+      checkAndFlashCompletions(hint.target.r, hint.target.c, hint.target.n);
+      if(checkAutoComplete()) showAutoCompletePopup();
+      else hideAutoCompletePopup();
+      checkWin();
+    }
   }
+
 
   // ---------- Controls ----------
   document.getElementById('diffEasy').addEventListener('click',()=>{
-    setDiffActive('diffEasy');
-    newGame('easy');
+    setDiffActive('easy'); newGame('easy');
   });
   document.getElementById('diffMedium').addEventListener('click',()=>{
-    setDiffActive('diffMedium');
-    newGame('medium');
+    setDiffActive('medium'); newGame('medium');
   });
   document.getElementById('diffHard').addEventListener('click',()=>{
-    setDiffActive('diffHard');
-    newGame('hard');
+    setDiffActive('hard'); newGame('hard');
   });
   document.getElementById('diffExpert').addEventListener('click',()=>{
-    setDiffActive('diffExpert');
-    newGame('expert');
+    setDiffActive('expert'); newGame('expert');
+  });
+
+  // Mobile diff tabs
+  document.getElementById('m-diffEasy').addEventListener('click',()=>{ setDiffActive('easy'); newGame('easy'); });
+  document.getElementById('m-diffMedium').addEventListener('click',()=>{ setDiffActive('medium'); newGame('medium'); });
+  document.getElementById('m-diffHard').addEventListener('click',()=>{ setDiffActive('hard'); newGame('hard'); });
+  document.getElementById('m-diffExpert').addEventListener('click',()=>{ setDiffActive('expert'); newGame('expert'); });
+
+  // Mobile action buttons
+  document.getElementById('m-newGame').addEventListener('click',()=>newGame(difficulty));
+  document.getElementById('m-undoBtn').addEventListener('click', undoMove);
+  document.getElementById('m-autoCandidates').addEventListener('click', autoFillCandidates);
+  document.getElementById('m-hintBtn').addEventListener('click', giveHint);
+  document.getElementById('m-learnBtn').addEventListener('click',()=>{
+    document.getElementById('learn-page').classList.add('open');
+  });
+  document.getElementById('m-settingsBtn').addEventListener('click',()=>{
+    document.getElementById('settings-overlay').classList.add('open');
   });
 
   // Learn page
@@ -2835,18 +3500,26 @@
     document.getElementById('learn-page').classList.remove('open');
   });
   document.getElementById('newGame').addEventListener('click',()=>newGame(difficulty));
-  document.getElementById('eraseBtn').addEventListener('click',eraseCell);
+  document.getElementById('undoBtn').addEventListener('click', undoMove);
   document.getElementById('autoCandidates').addEventListener('click',autoFillCandidates);
   document.getElementById('hintBtn').addEventListener('click',giveHint);
-  document.getElementById('solveBtn').addEventListener('click',revealSolution);
 
-  function setDiffActive(id){
+  function setDiffActive(diff){
+    // Desktop buttons
     document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+    const idMap={easy:'diffEasy',medium:'diffMedium',hard:'diffHard',expert:'diffExpert'};
+    const el = document.getElementById(idMap[diff]);
+    if(el) el.classList.add('active');
+    // Mobile tabs
+    document.querySelectorAll('.diff-tab').forEach(b=>b.classList.remove('active'));
+    const mel = document.getElementById('m-diff'+diff.charAt(0).toUpperCase()+diff.slice(1));
+    if(mel) mel.classList.add('active');
   }
 
   // keyboard support
   document.addEventListener('keydown',(e)=>{
+    // Ctrl+Z / Cmd+Z — undo (works even without a selected cell)
+    if((e.ctrlKey||e.metaKey) && e.key==='z'){ e.preventDefault(); undoMove(); return; }
     if(!selected) return;
     if(e.key>='1' && e.key<='9'){
       placeNumber(parseInt(e.key,10));
@@ -2920,25 +3593,33 @@
 
   fontSlider.addEventListener('input', ()=>applyFontScale(parseInt(fontSlider.value)));
 
-  // load saved prefs
+  const autoFillToggle = document.getElementById('autoFillToggle');
+
+  // load saved prefs — defaults: ocean theme, auto-fill on
   try{
     const prefs = JSON.parse(localStorage.getItem('sudoku-prefs')||'{}');
-    if(prefs.night) applyNight(true);
-    if(prefs.theme) applyTheme(prefs.theme);
-    if(prefs.font) { fontSlider.value=prefs.font; applyFontScale(prefs.font); }
-  } catch(e){}
+    applyNight(prefs.night || false);
+    applyTheme(prefs.theme || 'ocean');   // default blue
+    if(prefs.font){ fontSlider.value=prefs.font; applyFontScale(prefs.font); }
+    autoFillToggle.checked = prefs.autoFill !== false; // default ON
+  } catch(e){
+    applyTheme('ocean');
+    autoFillToggle.checked = true;
+  }
 
   // save prefs on change
   function savePrefs(){
     try{ localStorage.setItem('sudoku-prefs', JSON.stringify({
       night: nightToggle.checked,
       theme: currentTheme,
-      font: parseInt(fontSlider.value)
+      font: parseInt(fontSlider.value),
+      autoFill: autoFillToggle.checked
     })); } catch(e){}
   }
   nightToggle.addEventListener('change', savePrefs);
   document.querySelectorAll('.swatch').forEach(s=>s.addEventListener('click', savePrefs));
   fontSlider.addEventListener('input', savePrefs);
+  autoFillToggle.addEventListener('change', savePrefs);
 
   // init
   newGame('medium');
