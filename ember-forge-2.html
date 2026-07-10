@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ember Forge 2</title>
+<style>
+  html,body{margin:0;padding:0;background:#140f0b;color:#f5e6d0;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  #root{min-height:100vh;}
+  .ef-loading{color:#ffaa55;font-family:system-ui,sans-serif;text-align:center;padding:40px;font-size:18px;}
+  button{font-family:inherit;cursor:pointer;border:none;}
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#5a3818;border-radius:4px;}
+  @keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(1);}100%{opacity:0;transform:translateY(-60px) scale(1.3);}}
+  @keyframes pulseGlow{0%,100%{filter:brightness(1);}50%{filter:brightness(1.4);}}
+  @keyframes spark{0%{opacity:1;transform:translate(0,0) scale(1);}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0);}}
+  /* Large-screen / Tesla in-car scaling: uniform zoom keeps layout + touch targets proportional */
+  @media (min-width:900px)  and (max-width:1199px){ .ef-app{ zoom:1.3;  } }
+  @media (min-width:1200px) and (max-width:1499px){ .ef-app{ zoom:1.55; } }
+  @media (min-width:1500px){ .ef-app{ zoom:1.85; } }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"><div class="ef-loading">Stoking the forge&hellip;</div></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+/* ============================================================================
+   EMBER FORGE  —  Cosmic Blacksmith Idle (AdVenture-Capitalist-style rebuild)
+   Systems: quantity generators • milestone multipliers • managers •
+            per-item + global upgrades • cosmic angel prestige • offline earnings
+   ========================================================================== */
+
+const SAVE_KEY = "emberforge2-v1";
+
+// ── FORGE / WEAPON TIERS (global multiplier via forge XP) ───────────────────
+const WEAPON_TIERS = [
+  { name: "Rusty Dagger",         emoji: "🗡️", color: "#8B7355", xpNeeded: 150      },
+  { name: "Iron Sword",           emoji: "⚔️", color: "#9BA4B5", xpNeeded: 900      },
+  { name: "Steel Blade",          emoji: "🔪", color: "#C0C0C0", xpNeeded: 4500     },
+  { name: "Runed Axe",            emoji: "🪓", color: "#7EC8E3", xpNeeded: 20000    },
+  { name: "Ember Spear",          emoji: "🔱", color: "#FF6B35", xpNeeded: 90000    },
+  { name: "Storm Halberd",        emoji: "⚡", color: "#FFD700", xpNeeded: 400000   },
+  { name: "Void Cleaver",         emoji: "🌑", color: "#9B59B6", xpNeeded: 1800000  },
+  { name: "Celestial Lance",      emoji: "✨", color: "#00D4FF", xpNeeded: 8000000  },
+  { name: "Screaming Void Spear", emoji: "🌀", color: "#FF00FF", xpNeeded: 40000000 },
+];
+function weaponMultiplier(tier) { return 1 + tier * 0.5; } // 1x .. 5x
+
+// ── GENERATORS (Heroes as AdCap businesses) ─────────────────────────────────
+// baseReturn = ore per unit per cycle • cycleMs = cycle length • costMult = price growth
+const HEROES = [
+  { id:1, name:"Kira",     emoji:"🧝", title:"The Swift Scout",  color:"#7EC8E3", baseCost:15,       baseReturn:15,     cycleMs:1500,   costMult:1.09,
+    lore:'"I was back before you noticed I left." Fastest runner in the guild — and she never lets anyone forget it.' },
+  { id:2, name:"Boldar",   emoji:"🧔", title:"The Iron Hauler",  color:"#cc8844", baseCost:500,      baseReturn:75,     cycleMs:4000,   costMult:1.10,
+    lore:'Twenty years in the mines left him penniless — the Forge gave him purpose, and he hauls ore like the world depends on it.' },
+  { id:3, name:"Selene",   emoji:"🧙", title:"The Star Weaver",  color:"#b48ce8", baseCost:3000,     baseReturn:320,    cycleMs:7000,   costMult:1.11,
+    lore:'She reads the constellations that hang above the anvil and pulls raw starlight down into the coals.' },
+  { id:4, name:"Rex",      emoji:"🛡️", title:"The Bulwark",      color:"#e0c060", baseCost:15000,    baseReturn:1400,   cycleMs:11000,  costMult:1.12,
+    lore:'A wall that walks. Where Rex stands, the ore flows and nothing dares interrupt the work.' },
+  { id:5, name:"Vex",      emoji:"🦹", title:"The Shadow Broker",color:"#8a7fd6", baseCost:80000,    baseReturn:7000,   cycleMs:18000,  costMult:1.12,
+    lore:'Deals in secrets and cinder. Nobody knows where Vex sources the rare alloys — nobody asks.' },
+  { id:6, name:"Lyra",     emoji:"🧚", title:"The Sky Courier",  color:"#7ee0c8", baseCost:450000,   baseReturn:38000,  cycleMs:27000,  costMult:1.13,
+    lore:'Wings of foil-thin mithril. She flies the forged blades to the edge of the sky and returns heavier with ore.' },
+  { id:7, name:"Drake",    emoji:"🐉", title:"The Ember Wyrm",   color:"#ff7a4d", baseCost:2800000,  baseReturn:210000, cycleMs:40000,  costMult:1.14,
+    lore:'An old dragon who traded fire-breathing for forge-tending. His exhale alone keeps the crucible white-hot.' },
+  { id:8, name:"The Void", emoji:"👁️", title:"The Hungering Eye",color:"#e26bff", baseCost:15000000, baseReturn:1300000,cycleMs:60000,  costMult:1.15,
+    lore:'It is not a smith. It is the space between smiths — and it produces more than all of them combined.' },
+];
+
+// ── MANAGERS (automation, one per generator) ────────────────────────────────
+const MANAGERS = [
+  { heroId:1, name:"Torvin the Watcher",   emoji:"🧐", cost:150,      flavor:'"I keep the roster moving."' },
+  { heroId:2, name:"Grenda Ironwatch",     emoji:"📋", cost:1800,     flavor:'"Boldar doesn\'t rest. Neither do I."' },
+  { heroId:3, name:"Aethon the Scheduler", emoji:"🗂️", cost:12000,    flavor:'"Efficiency is its own magic."' },
+  { heroId:4, name:"Commander Voss",       emoji:"🎖️", cost:65000,    flavor:'"Rex obeys orders. My orders."' },
+  { heroId:5, name:"The Shadow Ledger",    emoji:"🕵️", cost:350000,   flavor:'"Vex works best unsupervised — I just count."' },
+  { heroId:6, name:"The Faerie Queen",     emoji:"👸", cost:2200000,  flavor:'"Lyra flies further with purpose."' },
+  { heroId:7, name:"The Dragon Tamer",     emoji:"🪄", cost:14000000, flavor:'"Drake needs no leash, just direction."' },
+  { heroId:8, name:"The Astral Anchor",    emoji:"⚓", cost:90000000, flavor:'"Something must hold the Eye in place."' },
+];
+
+// ── MILESTONES (owning N of a generator doubles its output) ─────────────────
+const MILESTONES = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
+function milestoneCount(count) { let n = 0; for (const m of MILESTONES) if (count >= m) n++; return n; }
+function milestoneMult(count) { return Math.pow(2, milestoneCount(count)); }
+function nextMilestone(count) { for (const m of MILESTONES) if (count < m) return m; return null; }
+
+// ── UPGRADES (per-hero + global, one-time purchases) ────────────────────────
+const UPGRADES = [];
+const HERO_UP_NAMES = ["Reinforced Tools", "Star-Etched Sigil", "Cosmic Ascension"];
+HEROES.forEach(h => {
+  [25, 50, 100].forEach((req, i) => {
+    UPGRADES.push({
+      id:`h${h.id}_u${i}`, kind:"hero", heroId:h.id, req,
+      name:`${h.name}: ${HERO_UP_NAMES[i]}`, emoji:h.emoji,
+      cost: Math.round((h.baseCost * (i===0?12:i===1?90:800)) + 200),
+      mult: i===2 ? 3 : 2,
+      desc:`${h.name} output ×${i===2?3:2}`,
+    });
+  });
+});
+// global "Cosmic Tempering" upgrades boost ALL generators
+[
+  { req:25,  cost:2.5e5, mult:2 },
+  { req:75,  cost:9e6,   mult:2 },
+  { req:150, cost:6e8,   mult:2 },
+  { req:300, cost:5e10,  mult:3 },
+].forEach((g, i) => {
+  UPGRADES.push({
+    id:`glob${i}`, kind:"global", reqTotal:g.req,
+    name:`Cosmic Tempering ${["I","II","III","IV"][i]}`, emoji:"🌌",
+    cost:g.cost, mult:g.mult, desc:`ALL generator output ×${g.mult}`,
+  });
+});
+// forge upgrades boost the manual tap + passive trickle
+const FORGE_UPGRADES = [
+  { id:"bellows", kind:"forge", effect:"tap",     name:"Great Bellows",   emoji:"🔥", cost:500,    val:2,  desc:"Forge tap ore ×2", reqTier:0 },
+  { id:"runes",   kind:"forge", effect:"tap",     name:"Rune Carving",    emoji:"🔮", cost:15000,  val:3,  desc:"Forge tap ore ×3", reqTier:2 },
+  { id:"crucible",kind:"forge", effect:"passive", name:"Star Crucible",   emoji:"⚗️", cost:60000,  val:0.02,desc:"+2% of ore/sec as passive trickle", reqTier:3 },
+];
+function availableUpgrades(st) {
+  return [...FORGE_UPGRADES, ...UPGRADES].filter(u => {
+    if (st.upgrades[u.id]) return false;
+    if (u.kind === "forge")  return st.weaponTier >= u.reqTier;
+    if (u.kind === "hero")   return (st.heroCounts[u.heroId]||0) >= u.req;
+    if (u.kind === "global") return HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0) >= u.reqTotal;
+    return true;
+  });
+}
+function affordableUpgrades(st) { return availableUpgrades(st).filter(u => st.ore >= u.cost); }
+
+// ── PRESTIGE (Cosmic angel-investor equivalent + dwarves) ───────────────────
+// Star Souls: permanent +2% global multiplier each. Earned on Reforge from lifetime ore.
+function starSoulsFor(lifetimeOreThisEra) {
+  if (lifetimeOreThisEra < 1e6) return 0;
+  return Math.floor(20 * Math.sqrt(lifetimeOreThisEra / 1e4));
+}
+function angelMult(starSouls) { return 1 + starSouls * 0.02; }
+function prestigeSpeedBonus(reforges) { return Math.min(reforges * 0.15, 2.0); } // faster cycles, cap +200%
+function dwarvesEarned(lifeHours, reforgeNumber) {
+  return 3 + Math.min(Math.floor(lifeHours), 20) + Math.max(0, reforgeNumber - 1);
+}
+
+// ── DWARVES (assignable permanent workers) ──────────────────────────────────
+const DWARF_JOBS = [
+  { id:"miners",   name:"Ore Miners",    emoji:"⛏️", color:"#ffaa33", desc:"+0.5% of ore/sec each as passive", per:c=>({passivePct:c*0.005}) },
+  { id:"smiths",   name:"Forge Smiths",  emoji:"🔨", color:"#ff6633", desc:"+4% generator output each",        per:c=>({heroPct:c*0.04}) },
+  { id:"scholars", name:"Rune Scholars", emoji:"📜", color:"#88aaff", desc:"+6% forge XP & tap each",           per:c=>({tapPct:c*0.06}) },
+];
+function dwarfBonuses(a) {
+  let passivePct=0, heroPct=0, tapPct=0;
+  DWARF_JOBS.forEach(j => { const b=j.per(a[j.id]||0); passivePct+=b.passivePct||0; heroPct+=b.heroPct||0; tapPct+=b.tapPct||0; });
+  return { passivePct, heroPct, tapPct };
+}
+
+// ── NUMBER FORMAT ───────────────────────────────────────────────────────────
+const SUF = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc","UDc","DDc"];
+function fmt(n) {
+  if (n === Infinity) return "∞";
+  if (n < 1000) return (Math.floor(n*10)/10).toString().replace(/\.0$/,"");
+  let i = Math.floor(Math.log10(n) / 3); i = Math.min(i, SUF.length - 1);
+  return (n / Math.pow(10, i*3)).toFixed(2) + SUF[i];
+}
+function fmtTime(ms) {
+  const s = Math.floor(ms/1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s/60), h = Math.floor(m/60);
+  if (h > 0) return h + "h " + (m%60) + "m";
+  return m + "m " + (s%60) + "s";
+}
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+function defaultState() {
+  return {
+    ore: 0,
+    lifetimeOre: 0,       // this era (since last reforge) — drives Star Souls
+    grandTotalOre: 0,     // all time
+    xp: 0, weaponTier: 0,
+    heroCounts: { 1: 0 }, // Kira purchasable from the start
+    managers: {},         // heroId -> true
+    upgrades: {},         // upgradeId -> true
+    starSouls: 0,
+    reforges: 0,
+    eraStart: Date.now(),
+    totalDwarves: 0,
+    dwarves: { miners:0, smiths:0, scholars:0 },
+    savedAt: Date.now(),
+    heroEnds: {},         // heroId -> cycle end timestamp (for offline / persistence)
+  };
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return { st: defaultState(), offline: null };
+    const st = Object.assign(defaultState(), JSON.parse(raw));
+    st.heroCounts = st.heroCounts || { 1: 0 };
+    st.dwarves = Object.assign({ miners:0, smiths:0, scholars:0 }, st.dwarves || {});
+    const offline = applyOffline(st);
+    return { st, offline };
+  } catch (e) {
+    return { st: defaultState(), offline: null };
+  }
+}
+// Compute idle earnings from managed generators while the tab was closed (cap 8h)
+function applyOffline(st) {
+  const now = Date.now();
+  let dt = now - (st.savedAt || now);
+  if (dt < 15000) return null;
+  const CAP = 8 * 3600 * 1000;
+  const capped = Math.min(dt, CAP);
+  let gained = 0;
+  HEROES.forEach(h => {
+    const count = st.heroCounts[h.id] || 0;
+    if (count > 0 && st.managers[h.id]) {
+      const rev = heroRevenue(st, h);
+      const ct = heroCycleMs(st, h);
+      const cycles = Math.floor(capped / ct);
+      gained += cycles * rev;
+    }
+  });
+  if (gained <= 0) return null;
+  st.ore += gained; st.lifetimeOre += gained; st.grandTotalOre += gained;
+  return { gained, ms: capped, capped: dt > CAP };
+}
+
+// ── CORE ECONOMY ────────────────────────────────────────────────────────────
+function globalOutputMult(st) {
+  const d = dwarfBonuses(st.dwarves);
+  let globUp = 1;
+  UPGRADES.forEach(u => { if (u.kind === "global" && st.upgrades[u.id]) globUp *= u.mult; });
+  return weaponMultiplier(st.weaponTier) * angelMult(st.starSouls) * (1 + d.heroPct) * globUp;
+}
+function heroUpgradeMult(st, heroId) {
+  let m = 1;
+  UPGRADES.forEach(u => { if (u.kind === "hero" && u.heroId === heroId && st.upgrades[u.id]) m *= u.mult; });
+  return m;
+}
+function heroRevenue(st, h) {
+  const count = st.heroCounts[h.id] || 0;
+  if (count <= 0) return 0;
+  return count * h.baseReturn * milestoneMult(count) * heroUpgradeMult(st, h.id) * globalOutputMult(st);
+}
+function heroCycleMs(st, h) {
+  return Math.max(120, Math.floor(h.cycleMs / (1 + prestigeSpeedBonus(st.reforges))));
+}
+function heroUnitCost(st, h) {
+  const count = st.heroCounts[h.id] || 0;
+  return Math.ceil(h.baseCost * Math.pow(h.costMult, count));
+}
+// cost of buying `qty` units (or how many affordable if qty==="max")
+function bulkCost(st, h, qty) {
+  const count = st.heroCounts[h.id] || 0;
+  if (qty === "max") {
+    let n = 0, total = 0, ore = st.ore;
+    while (n < 5000) {
+      const c = Math.ceil(h.baseCost * Math.pow(h.costMult, count + n));
+      if (total + c > ore) break;
+      total += c; n++;
+    }
+    return { n, total };
+  }
+  let total = 0;
+  for (let i = 0; i < qty; i++) total += Math.ceil(h.baseCost * Math.pow(h.costMult, count + i));
+  return { n: qty, total };
+}
+function tapValue(st) {
+  const d = dwarfBonuses(st.dwarves);
+  let mult = 1;
+  FORGE_UPGRADES.forEach(u => { if (u.effect === "tap" && st.upgrades[u.id]) mult *= u.val; });
+  const base = 1 + st.weaponTier * 0.5;
+  return base * mult * (1 + d.tapPct) * (1 + st.starSouls * 0.01);
+}
+function orePerSec(st) {
+  let ops = 0;
+  HEROES.forEach(h => {
+    const count = st.heroCounts[h.id] || 0;
+    if (count > 0 && st.managers[h.id]) ops += heroRevenue(st, h) / (heroCycleMs(st, h) / 1000);
+  });
+  return ops;
+}
+function passiveTrickle(st) {
+  const d = dwarfBonuses(st.dwarves);
+  let pct = d.passivePct;
+  if (st.upgrades["crucible"]) pct += 0.02;
+  return orePerSec(st) * pct;
+}
+
+// ── SMALL VISUAL BITS ───────────────────────────────────────────────────────
+function FloatText({ text, x, y, color }) {
+  return <div style={{position:"absolute",left:x,top:y,color,fontWeight:800,fontSize:20,
+    pointerEvents:"none",textShadow:"0 2px 6px #000",animation:"floatUp 0.9s ease-out forwards"}}>{text}</div>;
+}
+function ProgressBar({ pct, color, height=8 }) {
+  return <div style={{background:"#20160c",borderRadius:6,height,overflow:"hidden",width:"100%"}}>
+    <div style={{width:(pct*100)+"%",height:"100%",background:color,transition:"width 0.1s linear",
+      boxShadow:"0 0 8px "+color}}/></div>;
+}
+function Stat({ label, value, color }) {
+  return <div style={{textAlign:"center"}}>
+    <div style={{fontSize:11,color:"#c8a878",letterSpacing:0.5}}>{label}</div>
+    <div style={{fontSize:15,fontWeight:800,color:color||"#ffd9a0"}}>{value}</div>
+  </div>;
+}
+
+const PANEL = { background:"linear-gradient(135deg,#2c1c0f,#20140b)", border:"1px solid #4a3116",
+  borderRadius:12, padding:14, marginBottom:12 };
+
+// ── MAIN APP ────────────────────────────────────────────────────────────────
+function EmberForge() {
+  const init = useRef(loadState());
+  const S = useRef(init.current.st);
+  const [, setTick] = useState(0);
+  const rerender = useCallback(() => setTick(t => t + 1), []);
+  const [tab, setTab] = useState("forge");
+  const [floats, setFloats] = useState([]);
+  const [offline, setOffline] = useState(init.current.offline);
+  const [buyQty, setBuyQty] = useState(1);
+  const [toast, setToast] = useState(null);
+  const floatId = useRef(0);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
+
+  // ---- game loop ----
+  useEffect(() => {
+    let last = performance.now();
+    const iv = setInterval(() => {
+      const now = performance.now();
+      const wall = Date.now();
+      const st = S.current;
+      // passive trickle
+      const trickle = passiveTrickle(st) * ((now - last) / 1000);
+      if (trickle > 0) { st.ore += trickle; st.lifetimeOre += trickle; st.grandTotalOre += trickle; }
+      last = now;
+      // generator cycles
+      HEROES.forEach(h => {
+        const count = st.heroCounts[h.id] || 0;
+        if (count <= 0) return;
+        const end = st.heroEnds[h.id];
+        if (end && wall >= end) {
+          const rev = heroRevenue(st, h);
+          st.ore += rev; st.lifetimeOre += rev; st.grandTotalOre += rev;
+          if (st.managers[h.id]) { st.xp += rev * 0.04; st.heroEnds[h.id] = wall + heroCycleMs(st, h); } // only automated smiths advance weapon XP
+          else delete st.heroEnds[h.id];
+        } else if (!end && st.managers[h.id]) {
+          st.heroEnds[h.id] = wall + heroCycleMs(st, h);
+        }
+      });
+      // weapon tier ups
+      while (st.weaponTier < WEAPON_TIERS.length - 1 && st.xp >= WEAPON_TIERS[st.weaponTier].xpNeeded) {
+        st.xp -= WEAPON_TIERS[st.weaponTier].xpNeeded;
+        st.weaponTier++;
+      }
+      rerender();
+    }, 100);
+    return () => clearInterval(iv);
+  }, [rerender]);
+
+  // ---- autosave ----
+  useEffect(() => {
+    const save = () => { try { S.current.savedAt = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(S.current)); } catch (e) {} };
+    const iv = setInterval(save, 5000);
+    window.addEventListener("beforeunload", save);
+    return () => { clearInterval(iv); window.removeEventListener("beforeunload", save); save(); };
+  }, []);
+
+  // ---- actions ----
+  const tapForge = (e) => {
+    const st = S.current;
+    const v = tapValue(st);
+    st.ore += v; st.lifetimeOre += v; st.grandTotalOre += v; st.xp += v;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX || rect.left + rect.width/2) - rect.left;
+    const y = (e.clientY || rect.top + rect.height/2) - rect.top;
+    const id = floatId.current++;
+    setFloats(f => [...f, { id, text:"+"+fmt(v), x, y, color:"#ffcf8a" }]);
+    setTimeout(() => setFloats(f => f.filter(o => o.id !== id)), 900);
+    rerender();
+  };
+
+  const runHero = (h) => {
+    const st = S.current;
+    if ((st.heroCounts[h.id]||0) <= 0) return;
+    if (st.heroEnds[h.id]) return; // already running
+    st.heroEnds[h.id] = Date.now() + heroCycleMs(st, h);
+    rerender();
+  };
+
+  const buyHero = (h) => {
+    const st = S.current;
+    const { n, total } = bulkCost(st, h, buyQty);
+    if (n <= 0 || st.ore < total) return;
+    st.ore -= total;
+    st.heroCounts[h.id] = (st.heroCounts[h.id] || 0) + n;
+    rerender();
+  };
+
+  const buyManager = (m) => {
+    const st = S.current;
+    if (st.managers[m.heroId] || st.ore < m.cost) return;
+    st.ore -= m.cost; st.managers[m.heroId] = true;
+    if (!st.heroEnds[m.heroId] && (st.heroCounts[m.heroId]||0) > 0)
+      st.heroEnds[m.heroId] = Date.now() + heroCycleMs(st, HEROES.find(h=>h.id===m.heroId));
+    showToast(m.name + " hired — " + HEROES.find(h=>h.id===m.heroId).name + " now automated");
+    rerender();
+  };
+
+  const buyUpgrade = (u) => {
+    const st = S.current;
+    if (st.upgrades[u.id] || st.ore < u.cost) return;
+    st.ore -= u.cost; st.upgrades[u.id] = true;
+    rerender();
+  };
+
+  const buyAllUpgrades = () => {
+    const st = S.current;
+    const list = affordableUpgrades(st).sort((a,b) => a.cost - b.cost);
+    let bought = 0;
+    for (const u of list) { if (st.ore >= u.cost) { st.ore -= u.cost; st.upgrades[u.id] = true; bought++; } }
+    if (bought > 0) showToast("⚡ Bought " + bought + " upgrade" + (bought>1?"s":""));
+    rerender();
+  };
+
+  const assignDwarf = (jobId, delta) => {
+    const st = S.current;
+    const assigned = DWARF_JOBS.reduce((s,j)=>s+(st.dwarves[j.id]||0),0);
+    if (delta > 0 && assigned >= st.totalDwarves) return;
+    if (delta < 0 && (st.dwarves[jobId]||0) <= 0) return;
+    st.dwarves[jobId] = (st.dwarves[jobId]||0) + delta;
+    rerender();
+  };
+
+  const doReforge = () => {
+    const st = S.current;
+    const souls = starSoulsFor(st.lifetimeOre);
+    if (souls <= 0) { showToast("Reach 1M lifetime ore this era to earn Star Souls."); return; }
+    const lifeHours = (Date.now() - st.eraStart) / 3600000;
+    const newDwarves = dwarvesEarned(lifeHours, st.reforges + 1);
+    if (!window.confirm(
+      "REFORGE IN THE COSMIC CRUCIBLE?\n\n" +
+      "Gain " + souls + " Star Souls (permanent +" + (souls*2) + "% to ALL output)\n" +
+      "Gain " + newDwarves + " dwarves\n\n" +
+      "Resets: ore, generators, managers, upgrades, weapon tier.\n" +
+      "Keeps: Star Souls, dwarves, reforge speed bonus."
+    )) return;
+    const keep = {
+      starSouls: st.starSouls + souls,
+      reforges: st.reforges + 1,
+      totalDwarves: st.totalDwarves + newDwarves,
+      dwarves: st.dwarves,
+      grandTotalOre: st.grandTotalOre,
+    };
+    const fresh = defaultState();
+    Object.assign(fresh, keep);
+    S.current = fresh;
+    setTab("forge");
+    showToast("Reforged! +" + souls + " Star Souls, +" + newDwarves + " dwarves");
+    rerender();
+  };
+
+  const hardReset = () => {
+    if (!window.confirm("Erase ALL progress permanently?")) return;
+    localStorage.removeItem(SAVE_KEY);
+    S.current = defaultState();
+    setTab("forge"); rerender();
+  };
+
+  // ---- derived ----
+  const st = S.current;
+  const upgAvail = affordableUpgrades(st).length;
+  const ops = orePerSec(st) + passiveTrickle(st);
+  const tier = WEAPON_TIERS[st.weaponTier];
+  const nextTier = WEAPON_TIERS[st.weaponTier + 1];
+  const xpPct = nextTier ? Math.min(1, st.xp / tier.xpNeeded) : 1;
+  const pendingSouls = starSoulsFor(st.lifetimeOre);
+
+  const TABS = [
+    { id:"forge",    label:"⚒ Forge" },
+    { id:"heroes",   label:"⚔ Forge Crew" },
+    { id:"managers", label:"📋 Managers" },
+    { id:"upgrades", label:"⬆ Upgrades" },
+    { id:"dwarves",  label:"🪨 Dwarves" },
+    { id:"reforge",  label:"✦ Reforge" },
+  ];
+
+  return (
+    <div className="ef-app" style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% -10%,#3d1e08,#140f0b 60%)",
+      fontFamily:"system-ui,-apple-system,sans-serif",maxWidth:560,margin:"0 auto",paddingBottom:70}}>
+
+      {/* HUD */}
+      <div style={{position:"sticky",top:0,zIndex:5,background:"linear-gradient(#1a1109,#1a1109ee)",
+        borderBottom:"1px solid #4a3116",padding:"10px 14px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:26,fontWeight:900,color:"#ffb85a",lineHeight:1,textShadow:"0 0 14px #ff8c2a55"}}>
+              {fmt(st.ore)} <span style={{fontSize:15,color:"#c8a878"}}>ore</span></div>
+            <div style={{fontSize:12,color:"#9fd7a0"}}>{fmt(ops)}/sec</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:14,color:"#e26bff",fontWeight:800}}>✦ {st.starSouls} Souls</div>
+            <div style={{fontSize:11,color:"#c8a878"}}>+{(st.starSouls*2)}% all output</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8}}>
+          <span style={{fontSize:20}}>{tier.emoji}</span>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#c8a878",marginBottom:2}}>
+              <span style={{color:tier.color,fontWeight:700}}>{tier.name}</span>
+              <span>{nextTier ? fmt(st.xp)+" / "+fmt(tier.xpNeeded)+" XP" : "MAX TIER"}</span>
+            </div>
+            <ProgressBar pct={xpPct} color={tier.color} height={6}/>
+          </div>
+          <span style={{fontSize:11,color:"#ffcf8a",fontWeight:700}}>{weaponMultiplier(st.weaponTier).toFixed(1)}×</span>
+        </div>
+      </div>
+
+      {/* BODY */}
+      <div style={{padding:14}}>
+        {tab === "forge" && <ForgeTab st={st} onTap={tapForge} floats={floats} tapV={tapValue(st)}/>}
+        {tab === "heroes" && <HeroesTab st={st} buyQty={buyQty} setBuyQty={setBuyQty} onBuy={buyHero} onRun={runHero}/>}
+        {tab === "managers" && <ManagersTab st={st} onBuy={buyManager}/>}
+        {tab === "upgrades" && <UpgradesTab st={st} onBuy={buyUpgrade} onBuyAll={buyAllUpgrades}/>}
+        {tab === "dwarves" && <DwarvesTab st={st} onAssign={assignDwarf}/>}
+        {tab === "reforge" && <ReforgeTab st={st} pendingSouls={pendingSouls} onReforge={doReforge} onHardReset={hardReset}/>}
+      </div>
+
+      {/* TAB BAR */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,maxWidth:560,margin:"0 auto",
+        display:"flex",background:"#160e07",borderTop:"1px solid #4a3116"}}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"10px 2px",background:"none",position:"relative",
+            color: tab===t.id ? "#ffb85a" : "#8a6c46", fontSize:11, fontWeight:700,
+            borderTop: tab===t.id ? "2px solid #ffb85a" : "2px solid transparent"}}>{t.label}
+            {t.id==="upgrades" && upgAvail>0 && <span style={{position:"absolute",top:4,left:"50%",marginLeft:18,
+              minWidth:15,height:15,borderRadius:8,background:"#4ade80",color:"#0a2a12",fontSize:10,fontWeight:900,
+              lineHeight:"15px",textAlign:"center",boxShadow:"0 0 8px #4ade80"}}>{upgAvail}</span>}
+          </button>
+        ))}
+      </div>
+
+      {toast && <div style={{position:"fixed",bottom:70,left:"50%",transform:"translateX(-50%)",
+        background:"#3a2410",border:"1px solid #ffb85a",color:"#ffd9a0",padding:"10px 16px",borderRadius:10,
+        fontSize:13,maxWidth:"90%",textAlign:"center",zIndex:20,boxShadow:"0 4px 20px #000"}}>{toast}</div>}
+
+      {offline && <OfflineModal data={offline} onClose={()=>setOffline(null)}/>}
+    </div>
+  );
+}
+
+// ── TABS ────────────────────────────────────────────────────────────────────
+function ForgeTab({ st, onTap, floats, tapV }) {
+  const tier = WEAPON_TIERS[st.weaponTier];
+  return (
+    <div>
+      <div style={{...PANEL, textAlign:"center", position:"relative"}}>
+        <div style={{fontSize:13,color:"#c8a878",marginBottom:10}}>
+          Strike the anvil — forge ore &amp; weapon XP</div>
+        <button onClick={onTap} style={{position:"relative",width:190,height:190,borderRadius:"50%",
+          background:"radial-gradient(circle at 40% 35%,#5a3212,#2a1608)",
+          border:"3px solid "+tier.color, fontSize:78, color:"#fff",
+          boxShadow:"0 0 40px "+tier.color+"55, inset 0 0 30px #00000088",
+          animation:"pulseGlow 2.5s ease-in-out infinite"}}>
+          {tier.emoji}
+          {floats.map(f => <FloatText key={f.id} {...f}/>)}
+        </button>
+        <div style={{marginTop:12,fontSize:14,color:"#ffcf8a",fontWeight:700}}>+{fmt(tapV)} per strike</div>
+      </div>
+      <div style={{...PANEL}}>
+        <div style={{fontSize:13,color:"#c8a878",lineHeight:1.6}}>
+          <b style={{color:"#ffb85a"}}>How it works:</b> Strike the anvil to earn ore and forge XP.
+          Advancing weapon tiers boosts <b>every generator</b>. Spend ore in <b>Forge Crew</b> to buy
+          more of each smith, then <b>tap a smith</b> to send them forging a batch of ore. Hit milestone
+          counts (10, 25, 50, 100…) to <b>double</b> that smith's output. Hire <b>Managers</b> so they run
+          automatically — even while you're away — then <b>Reforge</b> for cosmic Star Souls.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QtyPicker({ buyQty, setBuyQty }) {
+  const opts = [1, 10, 25, 100, "max"];
+  return <div style={{display:"flex",gap:6,marginBottom:10}}>
+    {opts.map(o => <button key={o} onClick={()=>setBuyQty(o)} style={{flex:1,padding:"7px 0",borderRadius:8,
+      fontSize:13,fontWeight:800, background: buyQty===o ? "#ffb85a" : "#2c1c0f",
+      color: buyQty===o ? "#1a1109" : "#c8a878", border:"1px solid "+(buyQty===o?"#ffb85a":"#4a3116")}}>
+      {o==="max"?"MAX":"×"+o}</button>)}
+  </div>;
+}
+
+function HeroesTab({ st, buyQty, setBuyQty, onBuy, onRun }) {
+  return (
+    <div>
+      <QtyPicker buyQty={buyQty} setBuyQty={setBuyQty}/>
+      {HEROES.map(h => {
+        const count = st.heroCounts[h.id] || 0;
+        const prevUnlocked = h.id === 1 || (st.heroCounts[h.id-1]||0) > 0;
+        const cost = heroUnitCost(st, h);
+        const { n, total } = bulkCost(st, h, buyQty);
+        const afford = n > 0 && st.ore >= total;
+        const managed = !!st.managers[h.id];
+        const end = st.heroEnds[h.id];
+        const ct = heroCycleMs(st, h);
+        const running = end && Date.now() < end;
+        const pct = running ? Math.max(0, Math.min(1, 1 - (end - Date.now())/ct)) : (count>0 && !managed ? 0 : running?1:0);
+        const rev = heroRevenue(st, h);
+        const nm = nextMilestone(count);
+        if (!prevUnlocked && count === 0) {
+          return <div key={h.id} style={{...PANEL, opacity:0.55, textAlign:"center", color:"#8a6c46", fontSize:13}}>
+            🔒 Unlocks after recruiting {HEROES.find(x=>x.id===h.id-1).name}</div>;
+        }
+        return (
+          <div key={h.id} style={{...PANEL, border:"1px solid "+h.color+"66"}}>
+            <div onClick={(count>0 && !managed && !running) ? ()=>onRun(h) : undefined}
+              style={{display:"flex",alignItems:"center",gap:10,userSelect:"none",
+                cursor:(count>0 && !managed && !running)?"pointer":"default"}}>
+              <div style={{width:60,height:60,borderRadius:12,fontSize:34,flexShrink:0,display:"flex",
+                alignItems:"center",justifyContent:"center",
+                background:"radial-gradient(circle at 40% 35%,"+h.color+"44,#20140b)",
+                border:"2px solid "+h.color, opacity: count===0?0.5:1}}>{h.emoji}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                  <span style={{fontWeight:800,color:h.color,fontSize:15}}>{h.name}
+                    <span style={{color:"#c8a878",fontWeight:600,fontSize:12}}> · {h.title}</span></span>
+                  <span style={{fontWeight:900,color:"#ffd9a0",fontSize:15}}>×{count}</span>
+                </div>
+                <div style={{position:"relative",margin:"6px 0"}}>
+                  <ProgressBar pct={pct} color={h.color} height={22}/>
+                  <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,display:"flex",
+                    alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,
+                    color:"#fff",textShadow:"0 1px 3px #000,0 0 4px #000",pointerEvents:"none",letterSpacing:0.5}}>
+                    {count===0 ? "" : managed ? "⚙ AUTO" : running ? "Forging…" : "▶ TAP TO FORGE"}</div>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#c8a878"}}>
+                  <span>{fmt(rev)} / {fmtTime(ct)} {managed && <b style={{color:"#9fd7a0"}}>· AUTO</b>}</span>
+                  <span>{milestoneCount(count)>0 && <b style={{color:"#ffb85a"}}>×{milestoneMult(count)} </b>}
+                    {nm ? "next ×2 at "+nm : "MAX"}</span>
+                </div>
+              </div>
+            </div>
+            <button onClick={()=>onBuy(h)} disabled={!afford} style={{marginTop:10,width:"100%",padding:"9px 0",
+              borderRadius:9,fontWeight:800,fontSize:13,
+              background: afford ? "linear-gradient(90deg,#a85e1a,#d4841f)" : "#2c1c0f",
+              color: afford ? "#fff" : "#7a5c36", border:"1px solid "+(afford?"#ffb85a":"#4a3116")}}>
+              Buy {buyQty==="max" ? (n>0 ? n+" (max)" : "max") : n} · {fmt(n>0?total:cost)} ore</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ManagersTab({ st, onBuy }) {
+  return (
+    <div>
+      <div style={{fontSize:13,color:"#c8a878",marginBottom:10,lineHeight:1.5}}>
+        Hire a manager to <b style={{color:"#ffb85a"}}>automate</b> a generator — it runs forever, even while
+        you're away (offline earnings).</div>
+      {MANAGERS.map(m => {
+        const h = HEROES.find(x=>x.id===m.heroId);
+        const owned = !!st.managers[m.heroId];
+        const unlocked = (st.heroCounts[m.heroId]||0) > 0;
+        const afford = st.ore >= m.cost;
+        return (
+          <div key={m.heroId} style={{...PANEL, opacity: owned?0.7:1, display:"flex",alignItems:"center",gap:10}}>
+            <div style={{fontSize:30}}>{m.emoji}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:800,color:"#ffd9a0",fontSize:14}}>{m.name}</div>
+              <div style={{fontSize:11,color:"#c8a878"}}>Automates {h.emoji} {h.name} · {m.flavor}</div>
+            </div>
+            {owned ? <span style={{color:"#9fd7a0",fontWeight:800,fontSize:13}}>✓ Hired</span>
+              : <button onClick={()=>onBuy(m)} disabled={!unlocked||!afford} style={{padding:"8px 12px",borderRadius:9,
+                  fontWeight:800,fontSize:12, background: (unlocked&&afford)?"linear-gradient(90deg,#a85e1a,#d4841f)":"#2c1c0f",
+                  color:(unlocked&&afford)?"#fff":"#7a5c36",border:"1px solid "+((unlocked&&afford)?"#ffb85a":"#4a3116")}}>
+                  {unlocked ? fmt(m.cost) : "locked"}</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UpgradesTab({ st, onBuy, onBuyAll }) {
+  const all = [...FORGE_UPGRADES, ...UPGRADES];
+  const visible = all.filter(u => {
+    if (st.upgrades[u.id]) return true;
+    if (u.kind === "forge") return st.weaponTier >= u.reqTier;
+    if (u.kind === "hero") return (st.heroCounts[u.heroId]||0) >= u.req * 0.4; // preview a bit early
+    if (u.kind === "global") {
+      const tot = HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0);
+      return tot >= u.reqTotal * 0.4;
+    }
+    return true;
+  });
+  return (
+    <div>
+      <div style={{fontSize:13,color:"#c8a878",marginBottom:10,lineHeight:1.5}}>
+        One-time boosts. Per-crew upgrades unlock by owning enough of that smith; global upgrades boost everyone.</div>
+      {affordableUpgrades(st).length > 0 &&
+        <button onClick={onBuyAll} style={{width:"100%",padding:"12px 0",marginBottom:12,borderRadius:10,
+          fontWeight:900,fontSize:14,color:"#0a2a12",border:"1px solid #7dffa8",
+          background:"linear-gradient(90deg,#34d17a,#6affa0)",boxShadow:"0 0 14px #4ade8066",
+          animation:"pulseGlow 1.8s ease-in-out infinite"}}>
+          ⚡ SUPER UPGRADE · buy {affordableUpgrades(st).length} available upgrade{affordableUpgrades(st).length>1?"s":""}</button>}
+      {visible.map(u => {
+        const owned = !!st.upgrades[u.id];
+        let ready = true, reqTxt = "";
+        if (u.kind === "hero") { const c = st.heroCounts[u.heroId]||0; ready = c >= u.req; reqTxt = "own "+u.req+" "+HEROES.find(h=>h.id===u.heroId).name; }
+        else if (u.kind === "global") { const tot = HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0); ready = tot >= u.reqTotal; reqTxt = "own "+u.reqTotal+" total"; }
+        else if (u.kind === "forge") { ready = st.weaponTier >= u.reqTier; reqTxt = WEAPON_TIERS[u.reqTier].name; }
+        const afford = ready && st.ore >= u.cost;
+        return (
+          <div key={u.id} style={{...PANEL, opacity: owned?0.55:1, display:"flex",alignItems:"center",gap:10,
+            border: afford ? "1px solid #7dffa8" : "1px solid #4a3116",
+            boxShadow: afford ? "0 0 12px #4ade8055" : "none"}}>
+            <div style={{fontSize:26}}>{u.emoji}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:800,color:"#ffd9a0",fontSize:13}}>{u.name}</div>
+              <div style={{fontSize:11,color:"#c8a878"}}>{u.desc}{!ready && !owned && " · needs "+reqTxt}</div>
+            </div>
+            {owned ? <span style={{color:"#9fd7a0",fontWeight:800,fontSize:12}}>✓</span>
+              : <button onClick={()=>onBuy(u)} disabled={!afford} style={{padding:"8px 11px",borderRadius:9,
+                  fontWeight:800,fontSize:12, background: afford?"linear-gradient(90deg,#6a3ea8,#9a5ed4)":"#2c1c0f",
+                  color: afford?"#fff":"#7a5c36", border:"1px solid "+(afford?"#c79eff":"#4a3116")}}>
+                  {ready ? fmt(u.cost) : "🔒"}</button>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DwarvesTab({ st, onAssign }) {
+  const assigned = DWARF_JOBS.reduce((s,j)=>s+(st.dwarves[j.id]||0),0);
+  const free = st.totalDwarves - assigned;
+  return (
+    <div>
+      <div style={{...PANEL, textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#c8a878"}}>Dwarves earned through Reforging</div>
+        <div style={{fontSize:30,fontWeight:900,color:"#ffb85a"}}>🪨 {st.totalDwarves}</div>
+        <div style={{fontSize:13,color:free>0?"#9fd7a0":"#8a6c46"}}>{free} unassigned</div>
+      </div>
+      {st.totalDwarves === 0 && <div style={{...PANEL,textAlign:"center",color:"#8a6c46",fontSize:13}}>
+        No dwarves yet — earn them by Reforging in the Cosmic Crucible.</div>}
+      {DWARF_JOBS.map(j => {
+        const c = st.dwarves[j.id] || 0;
+        return (
+          <div key={j.id} style={{...PANEL, border:"1px solid "+j.color+"55"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:28}}>{j.emoji}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:800,color:j.color,fontSize:14}}>{j.name}</div>
+                <div style={{fontSize:11,color:"#c8a878"}}>{j.desc}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>onAssign(j.id,-1)} style={dwBtn(c>0)}>−</button>
+                <span style={{fontWeight:900,fontSize:17,minWidth:26,textAlign:"center",color:"#ffd9a0"}}>{c}</span>
+                <button onClick={()=>onAssign(j.id,1)} style={dwBtn(free>0)}>+</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function dwBtn(active){ return { width:34,height:34,borderRadius:8,fontSize:20,fontWeight:900,
+  background: active?"#3a2410":"#241708", color: active?"#ffb85a":"#5a4428",
+  border:"1px solid "+(active?"#ffb85a":"#3a2a14") }; }
+
+function ReforgeTab({ st, pendingSouls, onReforge, onHardReset }) {
+  const lifeHours = (Date.now() - st.eraStart)/3600000;
+  const newDwarves = dwarvesEarned(lifeHours, st.reforges+1);
+  return (
+    <div>
+      <div style={{...PANEL, textAlign:"center", border:"1px solid #e26bff55",
+        background:"radial-gradient(ellipse at 50% 0%,#2a1240,#1a0e28)"}}>
+        <div style={{fontSize:40}}>🌌</div>
+        <div style={{fontSize:18,fontWeight:900,color:"#e26bff"}}>Cosmic Crucible</div>
+        <div style={{fontSize:13,color:"#c8a878",lineHeight:1.6,margin:"8px 0"}}>
+          Collapse this era's forge into a dying star and reforge anew. You carry forward
+          <b style={{color:"#e26bff"}}> Star Souls</b> — the cosmic angel-investors of the Ember Forge —
+          each granting a permanent <b>+2%</b> to all output, forever.</div>
+        <div style={{display:"flex",justifyContent:"space-around",margin:"14px 0"}}>
+          <Stat label="Star Souls now" value={"✦ "+st.starSouls} color="#e26bff"/>
+          <Stat label="Reforge yields" value={"+"+pendingSouls} color="#9fd7a0"/>
+          <Stat label="+ Dwarves" value={"🪨 "+newDwarves} color="#ffb85a"/>
+        </div>
+        <button onClick={onReforge} disabled={pendingSouls<=0} style={{width:"100%",padding:"12px 0",borderRadius:10,
+          fontWeight:900,fontSize:15, background: pendingSouls>0?"linear-gradient(90deg,#7a2ec8,#c04ee0)":"#2c1c0f",
+          color: pendingSouls>0?"#fff":"#7a5c36", border:"1px solid "+(pendingSouls>0?"#e26bff":"#4a3116")}}>
+          {pendingSouls>0 ? "REFORGE · +"+pendingSouls+" Star Souls" : "Reach 1M ore this era"}</button>
+        <div style={{fontSize:11,color:"#8a6c46",marginTop:8}}>
+          Lifetime ore this era: {fmt(st.lifetimeOre)} · Reforges: {st.reforges}</div>
+      </div>
+      <div style={{...PANEL}}>
+        <div style={{fontSize:12,color:"#c8a878",lineHeight:1.6}}>
+          <b style={{color:"#ffb85a"}}>Reforge bonuses</b><br/>
+          Reforge speed: <b>+{Math.round(prestigeSpeedBonus(st.reforges)*100)}%</b> faster cycles ·
+          Angel multiplier: <b>×{angelMult(st.starSouls).toFixed(2)}</b> all output</div>
+      </div>
+      <button onClick={onHardReset} style={{width:"100%",padding:"9px 0",borderRadius:9,marginTop:4,
+        background:"#241010",color:"#a86",fontSize:12,border:"1px solid #4a2116"}}>Erase all progress</button>
+    </div>
+  );
+}
+
+function OfflineModal({ data, onClose }) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:30,display:"flex",
+      alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{background:"linear-gradient(135deg,#2c1c0f,#1a1109)",border:"1px solid #ffb85a",
+        borderRadius:16,padding:24,maxWidth:340,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:44}}>🔥</div>
+        <div style={{fontSize:18,fontWeight:900,color:"#ffb85a",margin:"6px 0"}}>Welcome back!</div>
+        <div style={{fontSize:13,color:"#c8a878"}}>Your automated forge crew ran for {fmtTime(data.ms)}
+          {data.capped && " (capped at 8h)"} and earned:</div>
+        <div style={{fontSize:30,fontWeight:900,color:"#ffd9a0",margin:"10px 0"}}>+{fmt(data.gained)} ore</div>
+        <button onClick={onClose} style={{padding:"10px 28px",borderRadius:10,fontWeight:800,
+          background:"linear-gradient(90deg,#a85e1a,#d4841f)",color:"#fff",fontSize:14}}>Collect</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<EmberForge/>);
+</script>
+</body>
+</html>
