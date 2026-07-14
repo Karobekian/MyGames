@@ -13,7 +13,6 @@
   ::-webkit-scrollbar{width:8px;}
   ::-webkit-scrollbar-thumb{background:#5a3818;border-radius:4px;}
   @keyframes pulseGlow{0%,100%{filter:brightness(1);}50%{filter:brightness(1.4);}}
-  /* Large-screen / Tesla in-car scaling: uniform zoom keeps layout + touch targets proportional */
   @media (min-width:900px)  and (max-width:1199px){ .ef-app{ zoom:1.3;  } }
   @media (min-width:1200px) and (max-width:1499px){ .ef-app{ zoom:1.55; } }
   @media (min-width:1500px){ .ef-app{ zoom:1.85; } }
@@ -29,16 +28,14 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 /* ============================================================================
    EMBER FORGE 2 — Cosmic Blacksmith Idle (AdVenture-Capitalist redesign)
-   Loop: tap a smith to run it → buy its Manager to automate → own more for
-   milestone doublings → Reforge for Star Souls → spend in the Soul Shop.
-   No anvil tapping. Weapon tiers auto-level on lifetime ore.
+   Endless upgrades + goals, bulk dwarves, big-number formatting.
    ========================================================================== */
 
 const SAVE_KEY = "emberforge2-v3";
-const MANAGER_BASE_EFF = 0.5;   // managers idle at 50% of active output (raise via Soul Shop)
-const START_ORE = 20;           // just enough to buy the first smith
+const MANAGER_BASE_EFF = 0.5;
+const START_ORE = 20;
 
-// ── WEAPON TIERS — auto-level as lifetime (grand total) ore crosses thresholds ──
+// ── WEAPON TIERS — auto-level on lifetime (grand total) ore ─────────────────
 const WEAPON_TIERS = [
   { name: "Rusty Dagger",         emoji: "🗡️", color: "#8B7355", at: 0     },
   { name: "Iron Sword",           emoji: "⚔️", color: "#9BA4B5", at: 2500  },
@@ -51,7 +48,7 @@ const WEAPON_TIERS = [
   { name: "Screaming Void Spear", emoji: "🌀", color: "#FF00FF", at: 1e14  },
 ];
 function weaponTierFor(total) { let t = 0; for (let i = 0; i < WEAPON_TIERS.length; i++) if (total >= WEAPON_TIERS[i].at) t = i; return t; }
-function weaponMultiplier(tier) { return 1 + tier * 0.4; } // 1x .. ~4.2x
+function weaponMultiplier(tier) { return 1 + tier * 0.4; }
 
 // ── GENERATORS (Smiths) ─────────────────────────────────────────────────────
 const HEROES = [
@@ -91,35 +88,41 @@ function milestoneCount(count) { let n = 0; for (const m of MILESTONES) if (coun
 function milestoneMult(count) { return Math.pow(2, milestoneCount(count)); }
 function nextMilestone(count) { for (const m of MILESTONES) if (count < m) return m; return null; }
 
-// ── UPGRADES (per-smith + global, one-time, bought with ore) ────────────────
-const UPGRADES = [];
-const HERO_UP_NAMES = ["Reinforced Tools", "Star-Etched Sigil", "Cosmic Ascension"];
-HEROES.forEach(h => {
-  [25, 50, 100].forEach((req, i) => {
-    UPGRADES.push({
-      id:`h${h.id}_u${i}`, kind:"hero", heroId:h.id, req,
-      name:`${h.name}: ${HERO_UP_NAMES[i]}`, emoji:h.emoji,
-      cost: Math.round((h.baseCost * (i===0?14:i===1?120:1100)) + 250),
-      mult: i===2 ? 3 : 2, desc:`${h.name} output ×${i===2?3:2}`,
-    });
-  });
-});
-[
-  { req:25,  cost:5e5,  mult:2 },
-  { req:75,  cost:2e7,  mult:2 },
-  { req:150, cost:1.5e9,mult:2 },
-  { req:300, cost:1e11, mult:3 },
-].forEach((g, i) => {
-  UPGRADES.push({
-    id:`glob${i}`, kind:"global", reqTotal:g.req,
-    name:`Cosmic Tempering ${["I","II","III","IV"][i]}`, emoji:"🌌",
-    cost:g.cost, mult:g.mult, desc:`ALL generator output ×${g.mult}`,
-  });
-});
-const FORGE_UPGRADES = [
-  { id:"crucible", kind:"forge", name:"Star Crucible", emoji:"⚗️", cost:120000, val:0.03, desc:"+3% of full output as passive income", reqTier:2 },
-  { id:"leyline",  kind:"forge", name:"Leyline Tap",   emoji:"🌐", cost:8e6,    val:0.04, desc:"+4% passive income", reqTier:4 },
-];
+// ── ENDLESS UPGRADES (auto-generate tiers forever) ──────────────────────────
+const UPG_CATS = [];
+HEROES.forEach(h => UPG_CATS.push({
+  id:"out"+h.id, icon:h.emoji, kind:"smith",
+  name:(l)=>h.name+" Forging "+(l+1), desc:"×2 "+h.name+" output",
+  eff:(l)=>"×"+fmt(Math.pow(2,l)),
+  cost:(l)=>Math.ceil(h.baseCost*30*Math.pow(3.2,l)),
+  unlocked:(st)=>(st.heroCounts[h.id]||0)>0,
+}));
+UPG_CATS.push({ id:"glob", icon:"🌌", kind:"global",
+  name:(l)=>"Cosmic Tempering "+(l+1), desc:"×2 ALL generator output",
+  eff:(l)=>"×"+fmt(Math.pow(2,l)),
+  cost:(l)=>Math.ceil(3e5*Math.pow(7,l)),
+  unlocked:(st)=>totalOwned(st)>=10 });
+UPG_CATS.push({ id:"tempo", icon:"⏱️", kind:"speed",
+  name:(l)=>"Forge Tempo "+(l+1), desc:"+8% cycle speed (all smiths)",
+  eff:(l)=>"+"+(l*8)+"%",
+  cost:(l)=>Math.ceil(1.2e5*Math.pow(5.5,l)),
+  unlocked:(st)=>totalOwned(st)>=5 });
+UPG_CATS.push({ id:"foreman", icon:"🔗", kind:"mgr",
+  name:(l)=>"Foreman Training "+(l+1), desc:"+4% manager output",
+  eff:(l)=>"+"+(l*4)+"%",
+  cost:(l)=>Math.ceil(4e5*Math.pow(6.5,l)),
+  unlocked:(st)=>Object.keys(st.managers).length>=1 });
+UPG_CATS.push({ id:"ley", icon:"🌐", kind:"passive",
+  name:(l)=>"Leyline Attunement "+(l+1), desc:"+2% passive income",
+  eff:(l)=>"+"+(l*2)+"%",
+  cost:(l)=>Math.ceil(2e5*Math.pow(6,l)),
+  unlocked:(st)=>totalOwned(st)>=25 });
+function upgLvl(st,id){ return (st.upgLevels && st.upgLevels[id]) || 0; }
+function upgCat(id){ return UPG_CATS.find(c=>c.id===id); }
+function totalOwned(st){ return HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0); }
+function availableUpgrades(st){ return UPG_CATS.filter(c=>c.unlocked(st)).map(c=>{ const l=upgLvl(st,c.id); return { id:c.id, cat:c, lvl:l, cost:c.cost(l) }; }); }
+function affordableUpgrades(st){ return availableUpgrades(st).filter(x=>st.ore>=x.cost); }
+function affordableManagers(st){ return MANAGERS.filter(m => !st.managers[m.heroId] && (st.heroCounts[m.heroId]||0) > 0 && st.ore >= m.cost); }
 
 // ── STAR SOULS (spendable prestige currency) ────────────────────────────────
 function baseSoulsFor(L) { if (L < 1e7) return 0; return 3 * Math.pow(L / 1e7, 0.4); }
@@ -132,7 +135,7 @@ function dwarvesEarned(lifeHours, reforgeNumber) {
   return 2 + Math.min(Math.floor(lifeHours), 12) + Math.max(0, reforgeNumber - 1);
 }
 
-// ── SOUL SHOP (permanent upgrades, kept across reforges) ────────────────────
+// ── SOUL SHOP (permanent upgrades) ──────────────────────────────────────────
 const SOUL_UPGRADES = [
   { id:"embers",  name:"Ember Blood",     emoji:"🩸", per:0.20, unit:"% all output",   baseCost:3, costMult:1.7, max:25 },
   { id:"bellows", name:"Astral Bellows",  emoji:"🌬️", per:0.40, unit:"% smith speed",   baseCost:4, costMult:1.8, max:15 },
@@ -144,23 +147,14 @@ function soulLvl(st, id) { return (st.soulUpgrades && st.soulUpgrades[id]) || 0;
 function soulUpgradeCost(u, lvl) { return Math.ceil(u.baseCost * Math.pow(u.costMult, lvl)); }
 function soulOutputMult(st) { return 1 + soulLvl(st, "embers") * 0.20; }
 function soulSpeedBonus(st) { return soulLvl(st, "swift") * 0.06 + soulLvl(st, "bellows") * 0.40; }
-function managerEfficiency(st) { return Math.min(1, MANAGER_BASE_EFF + soulLvl(st, "foreman") * 0.05); }
+function managerEfficiency(st) { return Math.min(1, MANAGER_BASE_EFF + soulLvl(st, "foreman") * 0.05) + upgLvl(st, "foreman") * 0.04; }
 function soulGainMult(st) { return 1 + soulLvl(st, "magnet") * 0.12; }
-
-// ── DWARVES (idle / output / soul roles — assign for a real trade-off) ──────
-const DWARF_JOBS = [
-  { id:"miners",   name:"Ore Miners",    emoji:"⛏️", color:"#ffaa33", desc:"+0.4% of full output as passive income each (works with no manager, boosts offline)", per:c=>({minerPct:c*0.004}) },
-  { id:"smiths",   name:"Forge Smiths",  emoji:"🔨", color:"#ff6633", desc:"+3% generator output each",     per:c=>({heroPct:c*0.03}) },
-  { id:"scholars", name:"Rune Scholars", emoji:"📜", color:"#88aaff", desc:"+3% Star Souls per reforge each", per:c=>({soulPct:c*0.03}) },
-];
-function dwarfBonuses(a) {
-  let minerPct=0, heroPct=0, soulPct=0;
-  DWARF_JOBS.forEach(j => { const b=j.per(a[j.id]||0); minerPct+=b.minerPct||0; heroPct+=b.heroPct||0; soulPct+=b.soulPct||0; });
-  return { minerPct, heroPct, soulPct };
+function affordableSoulUpgrades(st) {
+  return SOUL_UPGRADES.filter(u => soulLvl(st,u.id) < u.max && st.starSouls >= soulUpgradeCost(u, soulLvl(st,u.id))).length;
 }
 
-// ── ENDLESS GOALS (each cleared goal spawns the next harder tier) ───────────
-function oreGoalVal(i)     { return Math.pow(10, 4 + i); }                                   // 1e4, 1e5, 1e6...
+// ── ENDLESS GOALS ───────────────────────────────────────────────────────────
+function oreGoalVal(i)     { return Math.pow(10, 4 + i); }
 function reforgeGoalVal(i) { const s=[1,5,10,25,50,100]; return i<s.length?s[i]:100+(i-s.length+1)*100; }
 function soulGoalVal(i)    { const s=[3,10,25,100,500]; return i<s.length?s[i]:Math.round(500*Math.pow(3,i-s.length+1)); }
 function countGoalVal(i)   { const s=[10,25,50,100,250,500,1000]; return i<s.length?s[i]:s[s.length-1]*Math.pow(2,i-s.length+1); }
@@ -172,13 +166,38 @@ const GOAL_CATS = [
 HEROES.forEach(h => GOAL_CATS.push({ id:"smith"+h.id, icon:h.emoji, name:i=>"Own "+countGoalVal(i)+" "+h.name, val:countGoalVal, cur:st=>st.heroCounts[h.id]||0 }));
 function goalTier(st, catId) { return (st.goalTiers && st.goalTiers[catId]) || 0; }
 
-// ── NUMBER FORMAT ───────────────────────────────────────────────────────────
-const SUF = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc","UDc","DDc","TDc","QaDc","QiDc"];
+// ── DWARVES (idle / output / soul roles) ────────────────────────────────────
+const DWARF_JOBS = [
+  { id:"miners",   name:"Ore Miners",    emoji:"⛏️", color:"#ffaa33", desc:"+0.4% of full output as passive income each (works with no manager, boosts offline)", per:c=>({minerPct:c*0.004}) },
+  { id:"smiths",   name:"Forge Smiths",  emoji:"🔨", color:"#ff6633", desc:"+3% generator output each",     per:c=>({heroPct:c*0.03}) },
+  { id:"scholars", name:"Rune Scholars", emoji:"📜", color:"#88aaff", desc:"+3% Star Souls per reforge each", per:c=>({soulPct:c*0.03}) },
+];
+function dwarfBonuses(a) {
+  let minerPct=0, heroPct=0, soulPct=0;
+  DWARF_JOBS.forEach(j => { const b=j.per(a[j.id]||0); minerPct+=b.minerPct||0; heroPct+=b.heroPct||0; soulPct+=b.soulPct||0; });
+  return { minerPct, heroPct, soulPct };
+}
+
+// ── NUMBER FORMAT (short-scale ladder to Nonagintillion 10^273, then scientific) ──
+const ABBR_FIRST = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No"];
+const ABBR_UNITS = ["","Un","Duo","Tre","Quattuor","Quin","Sex","Septen","Octo","Novem"];
+const ABBR_TENS  = ["Dc","Vg","Tg","Qag","Qig","Sxg","Spg","Ocg","Nog"];
+function abbr(tier) {
+  if (tier <= 10) return ABBR_FIRST[tier];
+  const k = tier - 11, ten = Math.floor(k / 10), unit = k % 10;
+  if (ten >= ABBR_TENS.length) return null;
+  return ABBR_UNITS[unit] + ABBR_TENS[ten];
+}
 function fmt(n) {
-  if (n === Infinity) return "∞";
-  if (n < 1000) return (Math.floor(n*10)/10).toString().replace(/\.0$/,"");
-  let i = Math.floor(Math.log10(n) / 3); i = Math.min(i, SUF.length - 1);
-  return (n / Math.pow(10, i*3)).toFixed(2) + SUF[i];
+  if (typeof n !== "number" || isNaN(n)) return "0";
+  if (!isFinite(n)) return "∞";
+  if (n < 0) return "-" + fmt(-n);
+  if (n < 1000) return (Math.floor(n * 10) / 10).toString().replace(/\.0$/, "");
+  const tier = Math.floor(Math.log10(n) / 3);
+  const s = tier <= 91 ? abbr(tier) : null;
+  if (s !== null) return (n / Math.pow(10, tier * 3)).toFixed(2) + s;
+  const exp = Math.floor(Math.log10(n));
+  return (n / Math.pow(10, exp)).toFixed(2) + "e" + exp;
 }
 function fmtTime(ms) {
   const s = Math.floor(ms/1000);
@@ -193,9 +212,9 @@ function defaultState() {
   return {
     ore: START_ORE, lifetimeOre: 0, grandTotalOre: 0,
     weaponTier: 0,
-    heroCounts: { 1: 0 }, managers: {}, upgrades: {},
+    heroCounts: { 1: 0 }, managers: {}, upgLevels: {},
     starSouls: 0, lifetimeSouls: 0, soulUpgrades: {},
-    reforges: 0, ascensions: 0,   // ascensions: reserved for a future prestige layer
+    reforges: 0, ascensions: 0,
     eraStart: Date.now(),
     totalDwarves: 0, dwarves: { miners:0, smiths:0, scholars:0 },
     goalTiers: {}, goalsCleared: 0,
@@ -208,6 +227,7 @@ function loadState() {
     if (!raw) return { st: defaultState(), offline: null };
     const st = Object.assign(defaultState(), JSON.parse(raw));
     st.heroCounts = st.heroCounts || { 1: 0 };
+    st.upgLevels = st.upgLevels || {};
     st.soulUpgrades = st.soulUpgrades || {};
     st.goalTiers = st.goalTiers || {};
     st.dwarves = Object.assign({ miners:0, smiths:0, scholars:0 }, st.dwarves || {});
@@ -218,14 +238,12 @@ function loadState() {
     return { st: defaultState(), offline: null };
   }
 }
-// Idle earnings while closed (cap 8h): managed smiths at efficiency + miner/passive income
 function applyOffline(st) {
   const now = Date.now();
   let dt = now - (st.savedAt || now);
   if (dt < 15000) return null;
   const capped = Math.min(dt, 8 * 3600 * 1000);
-  const perSec = idlePerSec(st);
-  const gained = perSec * (capped / 1000);
+  const gained = idlePerSec(st) * (capped / 1000);
   if (gained <= 0) return null;
   st.ore += gained; st.lifetimeOre += gained; st.grandTotalOre += gained;
   return { gained, ms: capped, capped: dt > 8*3600*1000 };
@@ -234,22 +252,15 @@ function applyOffline(st) {
 // ── CORE ECONOMY ────────────────────────────────────────────────────────────
 function globalOutputMult(st) {
   const d = dwarfBonuses(st.dwarves);
-  let globUp = 1;
-  UPGRADES.forEach(u => { if (u.kind === "global" && st.upgrades[u.id]) globUp *= u.mult; });
-  return weaponMultiplier(st.weaponTier) * (1 + d.heroPct) * globUp * soulOutputMult(st);
-}
-function heroUpgradeMult(st, heroId) {
-  let m = 1;
-  UPGRADES.forEach(u => { if (u.kind === "hero" && u.heroId === heroId && st.upgrades[u.id]) m *= u.mult; });
-  return m;
+  return weaponMultiplier(st.weaponTier) * (1 + d.heroPct) * Math.pow(2, upgLvl(st,"glob")) * soulOutputMult(st);
 }
 function heroRevenue(st, h) {
   const count = st.heroCounts[h.id] || 0;
   if (count <= 0) return 0;
-  return count * h.baseReturn * milestoneMult(count) * heroUpgradeMult(st, h.id) * globalOutputMult(st);
+  return count * h.baseReturn * milestoneMult(count) * Math.pow(2, upgLvl(st,"out"+h.id)) * globalOutputMult(st);
 }
 function heroCycleMs(st, h) {
-  return Math.max(200, Math.floor(h.cycleMs / (1 + prestigeSpeedBonus(st.reforges) + soulSpeedBonus(st))));
+  return Math.max(200, Math.floor(h.cycleMs / (1 + prestigeSpeedBonus(st.reforges) + soulSpeedBonus(st) + upgLvl(st,"tempo")*0.08)));
 }
 function heroUnitCost(st, h) {
   const count = st.heroCounts[h.id] || 0;
@@ -260,7 +271,7 @@ function bulkCost(st, h, qty) {
   const unit = i => Math.ceil(h.baseCost * Math.pow(h.costMult, count + i));
   if (qty === "max") {
     let n = 0, total = 0;
-    while (n < 10000) { const c = unit(n); if (total + c > st.ore) break; total += c; n++; }
+    while (n < 100000) { const c = unit(n); if (total + c > st.ore) break; total += c; n++; }
     return { n, total };
   }
   let need;
@@ -282,36 +293,16 @@ function managerOutputPerSec(st) {
   return s;
 }
 function passivePct(st) {
-  const d = dwarfBonuses(st.dwarves);
-  let p = d.minerPct;
-  if (st.upgrades["crucible"]) p += 0.03;
-  if (st.upgrades["leyline"])  p += 0.04;
-  return p;
+  return dwarfBonuses(st.dwarves).minerPct + upgLvl(st,"ley") * 0.02;
 }
 function passivePerSec(st) { return totalSmithPerSec(st) * passivePct(st); }
 function idlePerSec(st) { return managerOutputPerSec(st) + passivePerSec(st); }
 
-function availableUpgrades(st) {
-  return [...FORGE_UPGRADES, ...UPGRADES].filter(u => {
-    if (st.upgrades[u.id]) return false;
-    if (u.kind === "forge")  return st.weaponTier >= u.reqTier;
-    if (u.kind === "hero")   return (st.heroCounts[u.heroId]||0) >= u.req;
-    if (u.kind === "global") return HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0) >= u.reqTotal;
-    return true;
-  });
-}
-function affordableUpgrades(st) { return availableUpgrades(st).filter(u => st.ore >= u.cost); }
-function affordableManagers(st) { return MANAGERS.filter(m => !st.managers[m.heroId] && (st.heroCounts[m.heroId]||0) > 0 && st.ore >= m.cost); }
-function affordableSoulUpgrades(st) {
-  return SOUL_UPGRADES.filter(u => soulLvl(st,u.id) < u.max && st.starSouls >= soulUpgradeCost(u, soulLvl(st,u.id))).length;
-}
-
-// advance every goal category whose current target is met; returns names cleared
 function advanceGoals(st) {
   const cleared = [];
   GOAL_CATS.forEach(cat => {
     let i = goalTier(st, cat.id), guard = 0;
-    while (cat.cur(st) >= cat.val(i) && guard < 250) {
+    while (cat.cur(st) >= cat.val(i) && guard < 400) {
       cleared.push(cat.name(i));
       const reward = Math.max(50, totalSmithPerSec(st) * 15);
       st.ore += reward; st.lifetimeOre += reward; st.grandTotalOre += reward;
@@ -359,11 +350,9 @@ function EmberForge() {
       const wall = Date.now();
       const st = S.current;
       const eff = managerEfficiency(st);
-      // continuous passive / miner income
       const pass = passivePerSec(st) * ((now - last) / 1000);
       if (pass > 0) { st.ore += pass; st.lifetimeOre += pass; st.grandTotalOre += pass; }
       last = now;
-      // managed smith cycles (discrete) + manual runs
       HEROES.forEach(h => {
         const count = st.heroCounts[h.id] || 0;
         if (count <= 0) return;
@@ -415,16 +404,23 @@ function EmberForge() {
     showToast(m.name + " hired — " + HEROES.find(h=>h.id===m.heroId).name + " now automated");
     rerender();
   };
-  const buyUpgrade = (u) => {
+  const buyUpgrade = (id) => {
     const st = S.current;
-    if (st.upgrades[u.id] || st.ore < u.cost) return;
-    st.ore -= u.cost; st.upgrades[u.id] = true; rerender();
+    const c = upgCat(id); if (!c) return;
+    const l = upgLvl(st, id), cost = c.cost(l);
+    if (st.ore < cost) return;
+    st.ore -= cost; st.upgLevels[id] = l + 1;
+    rerender();
   };
   const buyAllUpgrades = () => {
     const st = S.current;
-    const list = affordableUpgrades(st).sort((a,b) => a.cost - b.cost);
-    let bought = 0;
-    for (const u of list) { if (st.ore >= u.cost) { st.ore -= u.cost; st.upgrades[u.id] = true; bought++; } }
+    let bought = 0, guard = 0;
+    while (guard++ < 2000) {
+      const list = affordableUpgrades(st).sort((a,b) => a.cost - b.cost);
+      if (!list.length) break;
+      const x = list[0];
+      st.ore -= x.cost; st.upgLevels[x.id] = x.lvl + 1; bought++;
+    }
     if (bought > 0) showToast("⚡ Bought " + bought + " upgrade" + (bought>1?"s":""));
     rerender();
   };
@@ -439,9 +435,13 @@ function EmberForge() {
   const assignDwarf = (jobId, delta) => {
     const st = S.current;
     const assigned = DWARF_JOBS.reduce((s,j)=>s+(st.dwarves[j.id]||0),0);
-    if (delta > 0 && assigned >= st.totalDwarves) return;
-    if (delta < 0 && (st.dwarves[jobId]||0) <= 0) return;
-    st.dwarves[jobId] = (st.dwarves[jobId]||0) + delta; rerender();
+    const free = st.totalDwarves - assigned;
+    let d = delta;
+    if (d > 0) d = Math.min(d, free);
+    else d = Math.max(d, -(st.dwarves[jobId]||0));
+    if (d === 0) return;
+    st.dwarves[jobId] = (st.dwarves[jobId]||0) + d;
+    rerender();
   };
   const doReforge = () => {
     const st = S.current;
@@ -627,7 +627,7 @@ function SmithsTab({ st, buyQty, setBuyQty, onBuy, onRun }) {
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#c8a878"}}>
                   <span>{fmt(rev)} / {fmtTime(ct)} {managed && <b style={{color:"#9fd7a0"}}>· AUTO</b>}</span>
-                  <span>{milestoneCount(count)>0 && <b style={{color:"#ffb85a"}}>×{milestoneMult(count)} </b>}
+                  <span>{milestoneCount(count)>0 && <b style={{color:"#ffb85a"}}>×{fmt(milestoneMult(count))} </b>}
                     {nm ? "next ×2 at "+nm : "MAX"}</span>
                 </div>
               </div>
@@ -650,7 +650,7 @@ function ManagersTab({ st, onBuy }) {
     <div>
       <div style={{fontSize:13,color:"#c8a878",marginBottom:10,lineHeight:1.5}}>
         Managers run a smith automatically at <b style={{color:"#ffb85a"}}>{eff}%</b> of active output — your idle engine.
-        Raise efficiency toward 100% with <b>Foreman's Whip</b> in the Soul Shop.</div>
+        Raise it with <b>Foreman Training</b> (Upgrades) and <b>Foreman's Whip</b> (Soul Shop).</div>
       {MANAGERS.map(m => {
         const h = HEROES.find(x=>x.id===m.heroId);
         const owned = !!st.managers[m.heroId];
@@ -678,45 +678,33 @@ function ManagersTab({ st, onBuy }) {
 }
 
 function UpgradesTab({ st, onBuy, onBuyAll }) {
-  const all = [...FORGE_UPGRADES, ...UPGRADES];
-  const visible = all.filter(u => {
-    if (st.upgrades[u.id]) return true;
-    if (u.kind === "forge") return st.weaponTier >= u.reqTier;
-    if (u.kind === "hero") return (st.heroCounts[u.heroId]||0) >= u.req * 0.4;
-    if (u.kind === "global") { const tot = HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0); return tot >= u.reqTotal * 0.4; }
-    return true;
-  });
+  const avail = availableUpgrades(st).sort((a,b) => a.cost - b.cost);
+  const affCount = avail.filter(x => st.ore >= x.cost).length;
   return (
     <div>
       <div style={{fontSize:13,color:"#c8a878",marginBottom:10,lineHeight:1.5}}>
-        One-time boosts bought with ore. Per-smith upgrades unlock by owning enough of that smith; global upgrades boost everyone.</div>
-      {affordableUpgrades(st).length > 0 &&
+        Endless upgrades — buy a tier and a stronger one appears. Costs and effects scale forever.</div>
+      {affCount > 0 &&
         <button onClick={onBuyAll} style={{width:"100%",padding:"12px 0",marginBottom:12,borderRadius:10,
           fontWeight:900,fontSize:14,color:"#0a2a12",border:"1px solid #7dffa8",
           background:"linear-gradient(90deg,#34d17a,#6affa0)",boxShadow:"0 0 14px #4ade8066",
           animation:"pulseGlow 1.8s ease-in-out infinite"}}>
-          ⚡ SUPER UPGRADE · buy {affordableUpgrades(st).length} available upgrade{affordableUpgrades(st).length>1?"s":""}</button>}
-      {visible.map(u => {
-        const owned = !!st.upgrades[u.id];
-        let ready = true, reqTxt = "";
-        if (u.kind === "hero") { const c = st.heroCounts[u.heroId]||0; ready = c >= u.req; reqTxt = "own "+u.req+" "+HEROES.find(h=>h.id===u.heroId).name; }
-        else if (u.kind === "global") { const tot = HEROES.reduce((s,h)=>s+(st.heroCounts[h.id]||0),0); ready = tot >= u.reqTotal; reqTxt = "own "+u.reqTotal+" total"; }
-        else if (u.kind === "forge") { ready = st.weaponTier >= u.reqTier; reqTxt = WEAPON_TIERS[u.reqTier].name; }
-        const afford = ready && st.ore >= u.cost;
+          ⚡ SUPER UPGRADE · buy {affCount} affordable</button>}
+      {avail.map(x => {
+        const c = x.cat, afford = st.ore >= x.cost;
         return (
-          <div key={u.id} style={{...PANEL, opacity: owned?0.55:1, display:"flex",alignItems:"center",gap:10,
+          <div key={x.id} style={{...PANEL, display:"flex",alignItems:"center",gap:10,
             border: afford ? "1px solid #7dffa8" : "1px solid #4a3116",
             boxShadow: afford ? "0 0 12px #4ade8055" : "none"}}>
-            <div style={{fontSize:26}}>{u.emoji}</div>
+            <div style={{fontSize:26}}>{c.icon}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:800,color:"#ffd9a0",fontSize:13}}>{u.name}</div>
-              <div style={{fontSize:11,color:"#c8a878"}}>{u.desc}{!ready && !owned && " · needs "+reqTxt}</div>
+              <div style={{fontWeight:800,color:"#ffd9a0",fontSize:13}}>{c.name(x.lvl)}</div>
+              <div style={{fontSize:11,color:"#c8a878"}}>{c.desc} · <b style={{color:"#ffb85a"}}>now {c.eff(x.lvl)}</b></div>
             </div>
-            {owned ? <span style={{color:"#9fd7a0",fontWeight:800,fontSize:12}}>✓</span>
-              : <button onClick={()=>onBuy(u)} disabled={!afford} style={{padding:"8px 11px",borderRadius:9,
-                  fontWeight:800,fontSize:12, background: afford?"linear-gradient(90deg,#6a3ea8,#9a5ed4)":"#2c1c0f",
-                  color: afford?"#fff":"#7a5c36", border:"1px solid "+(afford?"#c79eff":"#4a3116")}}>
-                  {ready ? fmt(u.cost) : "🔒"}</button>}
+            <button onClick={()=>onBuy(x.id)} disabled={!afford} style={{padding:"8px 11px",borderRadius:9,
+              fontWeight:800,fontSize:12, background: afford?"linear-gradient(90deg,#6a3ea8,#9a5ed4)":"#2c1c0f",
+              color: afford?"#fff":"#7a5c36", border:"1px solid "+(afford?"#c79eff":"#4a3116")}}>
+              {fmt(x.cost)}</button>
           </div>
         );
       })}
@@ -727,12 +715,17 @@ function UpgradesTab({ st, onBuy, onBuyAll }) {
 function DwarvesTab({ st, onAssign }) {
   const assigned = DWARF_JOBS.reduce((s,j)=>s+(st.dwarves[j.id]||0),0);
   const free = st.totalDwarves - assigned;
+  const BIG = 1e9;
+  const mkBtn = (label, jobId, delta, active) => <button key={label} onClick={()=>onAssign(jobId,delta)} disabled={!active}
+    style={{flex:1,minWidth:0,padding:"6px 0",borderRadius:7,fontSize:11,fontWeight:800,
+      background: active?"#3a2410":"#241708", color: active?"#ffb85a":"#5a4428",
+      border:"1px solid "+(active?"#ffb85a":"#3a2a14")}}>{label}</button>;
   return (
     <div>
       <div style={{...PANEL, textAlign:"center"}}>
         <div style={{fontSize:13,color:"#c8a878"}}>Dwarves earned through Reforging · assign for a trade-off</div>
-        <div style={{fontSize:30,fontWeight:900,color:"#ffb85a"}}>🪨 {st.totalDwarves}</div>
-        <div style={{fontSize:13,color:free>0?"#9fd7a0":"#8a6c46"}}>{free} unassigned</div>
+        <div style={{fontSize:30,fontWeight:900,color:"#ffb85a"}}>🪨 {fmt(st.totalDwarves)}</div>
+        <div style={{fontSize:13,color:free>0?"#9fd7a0":"#8a6c46"}}>{fmt(free)} unassigned</div>
       </div>
       {st.totalDwarves === 0 && <div style={{...PANEL,textAlign:"center",color:"#8a6c46",fontSize:13}}>
         No dwarves yet — earn them by Reforging in the Cosmic Crucible.</div>}
@@ -740,17 +733,22 @@ function DwarvesTab({ st, onAssign }) {
         const c = st.dwarves[j.id] || 0;
         return (
           <div key={j.id} style={{...PANEL, border:"1px solid "+j.color+"55"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{fontSize:28}}>{j.emoji}</div>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:800,color:j.color,fontSize:14}}>{j.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <div style={{fontSize:26}}>{j.emoji}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:800,color:j.color,fontSize:14}}>{j.name} <span style={{color:"#ffd9a0"}}>· {fmt(c)}</span></div>
                 <div style={{fontSize:11,color:"#c8a878"}}>{j.desc}</div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <button onClick={()=>onAssign(j.id,-1)} style={dwBtn(c>0)}>−</button>
-                <span style={{fontWeight:900,fontSize:17,minWidth:26,textAlign:"center",color:"#ffd9a0"}}>{c}</span>
-                <button onClick={()=>onAssign(j.id,1)} style={dwBtn(free>0)}>+</button>
-              </div>
+            </div>
+            <div style={{display:"flex",gap:4}}>
+              {mkBtn("−All", j.id, -BIG, c>0)}
+              {mkBtn("−100", j.id, -100, c>0)}
+              {mkBtn("−10", j.id, -10, c>0)}
+              {mkBtn("−1", j.id, -1, c>0)}
+              {mkBtn("+1", j.id, 1, free>0)}
+              {mkBtn("+10", j.id, 10, free>0)}
+              {mkBtn("+100", j.id, 100, free>0)}
+              {mkBtn("Max", j.id, BIG, free>0)}
             </div>
           </div>
         );
@@ -758,9 +756,6 @@ function DwarvesTab({ st, onAssign }) {
     </div>
   );
 }
-function dwBtn(active){ return { width:34,height:34,borderRadius:8,fontSize:20,fontWeight:900,
-  background: active?"#3a2410":"#241708", color: active?"#ffb85a":"#5a4428",
-  border:"1px solid "+(active?"#ffb85a":"#3a2a14") }; }
 
 function GoalsTab({ st }) {
   const rows = GOAL_CATS.map(cat => {
@@ -773,7 +768,7 @@ function GoalsTab({ st }) {
     <div>
       <div style={{...PANEL, textAlign:"center"}}>
         <div style={{fontSize:13,color:"#c8a878"}}>Endless objectives — clear one and a harder tier appears</div>
-        <div style={{fontSize:30,fontWeight:900,color:"#ffb85a"}}>🏆 {st.goalsCleared||0}</div>
+        <div style={{fontSize:30,fontWeight:900,color:"#ffb85a"}}>🏆 {fmt(st.goalsCleared||0)}</div>
         <div style={{fontSize:12,color:"#8a6c46"}}>goals cleared · each grants a burst of ore</div>
       </div>
       {rows.map(r => (
@@ -808,15 +803,15 @@ function ReforgeTab({ st, onReforge, onBuySoul, onHardReset }) {
           <ProgressBar pct={progress} color="#e26bff" height={8}/></div>}
         <div style={{display:"flex",justifyContent:"space-around",margin:"14px 0"}}>
           <Stat label="Souls" value={"✦ "+fmt(st.starSouls)} color="#e26bff"/>
-          <Stat label="Reforge yields" value={"+"+pending} color="#9fd7a0"/>
-          <Stat label="+ Dwarves" value={"🪨 "+newDwarves} color="#ffb85a"/>
+          <Stat label="Reforge yields" value={"+"+fmt(pending)} color="#9fd7a0"/>
+          <Stat label="+ Dwarves" value={"🪨 "+fmt(newDwarves)} color="#ffb85a"/>
         </div>
         <button onClick={onReforge} disabled={pending<=0} style={{width:"100%",padding:"12px 0",borderRadius:10,
           fontWeight:900,fontSize:15, background: pending>0?"linear-gradient(90deg,#7a2ec8,#c04ee0)":"#2c1c0f",
           color: pending>0?"#fff":"#7a5c36", border:"1px solid "+(pending>0?"#e26bff":"#4a3116")}}>
-          {pending>0 ? "REFORGE · +"+pending+" Star Souls" : "Reach 10M ore this era"}</button>
+          {pending>0 ? "REFORGE · +"+fmt(pending)+" Star Souls" : "Reach 10M ore this era"}</button>
         <div style={{fontSize:11,color:"#8a6c46",marginTop:8}}>
-          Reforges: {st.reforges} · Speed: +{Math.round((prestigeSpeedBonus(st.reforges)+soulSpeedBonus(st))*100)}% · Manager eff: {Math.round(managerEfficiency(st)*100)}%</div>
+          Reforges: {fmt(st.reforges)} · Speed: +{Math.round((prestigeSpeedBonus(st.reforges)+soulSpeedBonus(st))*100)}% · Manager eff: {Math.round(managerEfficiency(st)*100)}%</div>
       </div>
 
       <div style={{...PANEL}}>
